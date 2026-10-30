@@ -62,6 +62,8 @@ header p { margin: 0; color: var(--muted); }
 .overlay { position: absolute; font-family: var(--mono); font-size: 11.5px; background: rgba(3, 4, 9, 0.74); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; pointer-events: none; font-variant-numeric: tabular-nums; }
 #readout { left: 10px; bottom: 10px; max-width: calc(100% - 20px); white-space: pre-wrap; }
 #hint { right: 10px; top: 10px; color: var(--muted); max-width: calc(100% - 20px); }
+.speedo { left: 10px; top: 10px; padding: 6px 8px; }
+.speedo canvas { display: block; width: 210px; height: 140px; }
 .fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
 
 .panel { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
@@ -1157,6 +1159,26 @@ function makeFall() {
     world.add(path, fronts);
     const setTag = (spr, text) => { if (spr.userData.text === text) return; spr.userData.text = text; const fresh = label(text, { size: 0.28, color: spr.userData.color }); spr.material.map.dispose(); spr.material.map = fresh.material.map; spr.scale.copy(fresh.scale); fresh.material.dispose(); };
     topTag.userData.color = '#ffb366'; botTag.userData.color = '#8cc2ff';
+    // Spacetime speedometer: total speed fixed at c, split between time and space by the tilt
+    const meterCanvas = h('canvas', { width: 420, height: 280, 'aria-label': 'Spacetime speedometer' });
+    const meter = h('div', { class: 'overlay speedo' }, meterCanvas);
+    $('#stage').append(meter);
+    function drawMeter(th) {
+      const ctx = meterCanvas.getContext('2d'), W = meterCanvas.width, H = meterCanvas.height;
+      const ox = 22, oy = 64, Lh = 300, c = Math.cos(th), sn = Math.sin(th);
+      const px = ox + Lh * c, py = oy + Lh * sn;
+      ctx.clearRect(0, 0, W, H);
+      ctx.font = '500 21px "IBM Plex Sans", system-ui, sans-serif'; ctx.fillStyle = '#e7e9f0';
+      ctx.fillText('Spacetime speedometer', ox, 30);
+      ctx.lineWidth = 5; ctx.lineCap = 'round';
+      ctx.strokeStyle = '#8cc2ff'; ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(px, oy); ctx.stroke();
+      ctx.strokeStyle = '#d94c3d'; ctx.beginPath(); ctx.moveTo(px, oy); ctx.lineTo(px, py); ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(px, py); ctx.stroke();
+      ctx.font = '19px "IBM Plex Mono", monospace';
+      ctx.fillStyle = '#8cc2ff'; ctx.fillText(`through its own time ${c.toFixed(3)} c`, ox, oy - 12);
+      ctx.fillStyle = '#ff8a7a'; ctx.fillText(`down through space ${sn.toFixed(3)} c`, ox, H - 44);
+      ctx.fillStyle = '#c9cdda'; ctx.fillText('total: always exactly c', ox, H - 16);
+    }
     let st, pathPts, frontPts, hold;
     const reset = () => { st = { x: X0, y: H0, th: 0, s: 0, top: 0, bot: 0, nextFront: 0 }; pathPts = [new THREE.Vector3(X0, H0, 0)]; frontPts = []; hold = 0; };
     reset();
@@ -1168,6 +1190,8 @@ function makeFall() {
         slider({ id: 'fspeed', label: 'Animation speed', min: 0.2, max: 2, step: 0.05, value: o.speed, fmt: v => `${(+v).toFixed(2)}×`, oninput: v => { o.speed = v; } }),
         buttons([['Start over', reset, true]]),
         h('p', { class: 'small' }, 'The white bar is the apple drawn as a stack of clocks. Even sitting still, it is moving into the future. Its top clocks are higher, so they tick a little faster and pull ahead of the bottom ones, and the bar turns, the way a tank turns toward its slower track or a marching line wheels around its slowest marcher. Turning toward the slower clocks means turning toward the ground: that is falling.'),
+        h('p', { class: 'small' }, 'Why does the bottom lagging behind mean moving down? In relativity, when an object moves past you, its leading clocks always read behind its trailing ones. That is the rule called “leading clocks lag.” An apple whose bottom clocks lag its top ones is exactly what an apple moving bottom-first looks like. So the lag and the fall are not two things; they are the same fact described two ways.'),
+        h('p', { class: 'small' }, 'The speedometer in the corner shows the apple’s speed through spacetime. Its total is always the speed of light. Sitting still, all of it points into time. As the path tilts, a slice turns into downward speed through space and the apple’s own time runs that much slower.'),
         h('p', { class: 'small' }, 'Turn the clock difference off and the apple floats. For slow things like apples and planets, this difference in clock rates is almost the whole of gravity; the bending of space matters only for fast things like light.'),
         h('p', { class: 'small' }, "Across is the time on the apple's own clock, a drawing trick from Lewis Carroll Epstein's book Relativity Visualized. In it everything moves through spacetime at the same speed, which is what makes the tank picture exact."),
         realNumbers(),
@@ -1198,10 +1222,12 @@ function makeFall() {
         const ticks = v => (v * 10).toFixed(1);
         setTag(topTag, `top clock ${ticks(st.top)}`); topTag.position.copy(a).add(new THREE.Vector3(0, 0.35, 0));
         setTag(botTag, `bottom clock ${ticks(st.bot)}`); botTag.position.copy(b).add(new THREE.Vector3(0, -0.35, 0));
+        drawMeter(-st.th);
         const lead = (st.top - st.bot) * 10, tiltDeg = -st.th * 180 / Math.PI, down = Math.sin(-st.th);
         readout(o.k === 0 ? 'every clock ticks at the same rate, so the apple goes straight into the future and never falls'
           : hold > 0 ? 'the apple has reached the ground' : `top clock ${lead.toFixed(2)} ticks ahead of the bottom one · path tilted ${tiltDeg.toFixed(1)}° downward\ndownward speed = ${down.toFixed(3)} × its speed through spacetime, and growing as the tilt grows · height ${st.y.toFixed(2)}`);
       },
+      dispose() { meter.remove(); },
     };
     // Why a tiny clock difference gives a fast fall: the apple covers c × 1 s of time every second
     function realNumbers() {
