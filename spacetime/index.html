@@ -1103,12 +1103,160 @@ function makeFall() {
   const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 500);
   const controls = makeControls(camera);
   controls.minDistance = 4; controls.maxDistance = 90;
-  const o = { mode: 'aging', ticks: true, speed: 1, ratio: 0.5, push: 0 };
+  const o = { mode: 'steer', ticks: true, speed: 1, ratio: 0.5, push: 0, k: 0.08, kSaved: 0.08 };
   const world = new THREE.Group(); scene.add(world);
   let api = null;
   function build(placeCamera = false) {
     api?.dispose?.(); disposeTree(world); world.clear();
-    api = o.mode === 'aging' ? buildAging(placeCamera) : buildPair(placeCamera);
+    api = { steer: buildSteer, elevator: buildElevator, aging: buildAging, pair: buildPair }[o.mode](placeCamera);
+  }
+
+  // ---- Steering apple: a column of clocks turns toward the slower ones ----
+  // Drawn as an Epstein diagram: across is the apple's own clock time, up is height. Every
+  // object moves through it at the same speed, so a path bends toward slower clocks exactly
+  // like a light ray bending toward slower glass. Ray curvature = -(d ln rate/dh) cos(angle),
+  // which reproduces h = h0 - g t²/2 for slow motion.
+  function buildSteer(placeCamera) {
+    if (placeCamera) { camera.position.set(-0.6, 2.4, 17.5); controls.target.set(-0.6, 2.0, 0); }
+    const X0 = -6, XMAX = 7, H0 = 3.4, L = 1.7, NC = 5;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(XMAX - X0 + 1, 0.8, 2.4), new THREE.MeshBasicMaterial({ color: 0x1b2c26 }));
+    slab.position.set((X0 + XMAX) / 2, -0.4, 0); world.add(slab);
+    // Background wash: blue low down where clocks run slow, warm up high where they run fast
+    const tmp = [0, 0, 0];
+    const wash = new THREE.PlaneGeometry(XMAX - X0, 5, 1, 1), wc = [];
+    for (let i = 0; i < 4; i++) { const top = wash.attributes.position.getY(i) > 0; wc.push(...(top ? [0.55, 0.32, 0.12] : [0.1, 0.22, 0.42])); }
+    wash.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3));
+    const washMesh = new THREE.Mesh(wash, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.22, depthWrite: false }));
+    washMesh.position.set((X0 + XMAX) / 2, 2.5, -0.05); world.add(washMesh);
+    const lab = (t, p, c, s = 0.32) => { const l = label(t, { size: s, color: c }); l.position.set(...p); world.add(l); return l; };
+    lab('clocks tick faster up here', [X0 + 1.9, 4.65, 0], '#ffb366', 0.3);
+    lab('clocks tick slower down here', [X0 + 1.9, 0.3, 0], '#8cc2ff', 0.3);
+    lab("time on the apple's own clock →", [(X0 + XMAX) / 2, -1.1, 0], '#8a90a8');
+    const sx = X0 - 1.7;
+    world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(sx, 0, 0), new THREE.Vector3(sx, 5, 0)]), new THREE.LineBasicMaterial({ color: 0x8a90a8, transparent: true, opacity: 0.5 })));
+    lab('in space', [sx, 5.45, 0], '#8a90a8');
+    // Straight path the apple would take if every clock ticked at the same rate
+    const ghost = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(X0, H0, 0), new THREE.Vector3(XMAX, H0, 0)]), new THREE.LineDashedMaterial({ color: 0x8a90a8, dashSize: 0.25, gapSize: 0.18, transparent: true, opacity: 0.5 }));
+    ghost.computeLineDistances(); world.add(ghost);
+    lab('if all clocks ticked alike', [XMAX - 1.5, H0 + 0.35, 0], '#8a90a8', 0.26);
+    // The apple: a short column of clocks (its "front"), drawn across its direction of travel
+    const rod = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xffffff }));
+    const apple = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 16), new THREE.MeshBasicMaterial({ color: 0xd94c3d }));
+    const clocks = Array.from({ length: NC }, (_, i) => {
+      const t = i / (NC - 1); rateColor(1 - Math.pow(10, -9 + t * 7), tmp);
+      return new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(...tmp) }));
+    });
+    const sideApple = apple.clone();
+    world.add(rod, apple, sideApple, ...clocks);
+    const topTag = lab('', [0, 0, 0], '#ffb366', 0.28), botTag = lab('', [0, 0, 0], '#8cc2ff', 0.28);
+    const path = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xd94c3d }));
+    const fronts = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28 }));
+    world.add(path, fronts);
+    const setTag = (spr, text) => { if (spr.userData.text === text) return; spr.userData.text = text; const fresh = label(text, { size: 0.28, color: spr.userData.color }); spr.material.map.dispose(); spr.material.map = fresh.material.map; spr.scale.copy(fresh.scale); fresh.material.dispose(); };
+    topTag.userData.color = '#ffb366'; botTag.userData.color = '#8cc2ff';
+    let st, pathPts, frontPts, hold;
+    const reset = () => { st = { x: X0, y: H0, th: 0, s: 0, top: 0, bot: 0, nextFront: 0 }; pathPts = [new THREE.Vector3(X0, H0, 0)]; frontPts = []; hold = 0; };
+    reset();
+    const rate = y => 1 + o.k * y;
+    return {
+      ui: () => [
+        check({ id: 'equal', label: 'Make every clock tick at the same rate', checked: o.k === 0, onchange: v => { o.k = v ? 0 : o.kSaved; reset(); refreshControls(); } }),
+        slider({ id: 'kgrad', label: 'How much faster clocks tick higher up', min: 0, max: 0.2, step: 0.005, value: o.k, fmt: v => +v === 0 ? 'no difference' : `${(+v * 100).toFixed(1)}% per unit of height`, oninput: v => { o.k = v; if (v > 0) o.kSaved = v; reset(); const c = document.getElementById('equal'); if (c) c.checked = v === 0; } }),
+        slider({ id: 'fspeed', label: 'Animation speed', min: 0.2, max: 2, step: 0.05, value: o.speed, fmt: v => `${(+v).toFixed(2)}×`, oninput: v => { o.speed = v; } }),
+        buttons([['Start over', reset, true]]),
+        h('p', { class: 'small' }, 'The white bar is the apple drawn as a stack of clocks. Even sitting still, it is moving into the future. Its top clocks are higher, so they tick a little faster and pull ahead of the bottom ones, and the bar turns, the way a tank turns toward its slower track or a marching line wheels around its slowest marcher. Turning toward the slower clocks means turning toward the ground: that is falling.'),
+        h('p', { class: 'small' }, 'Turn the clock difference off and the apple floats. For slow things like apples and planets, this difference in clock rates is almost the whole of gravity; the bending of space matters only for fast things like light.'),
+        h('p', { class: 'small' }, "Across is the time on the apple's own clock, a drawing trick from Lewis Carroll Epstein's book Relativity Visualized. In it everything moves through spacetime at the same speed, which is what makes the tank picture exact."),
+      ],
+      update(dt) {
+        if (hold > 0) { hold -= dt; if (hold <= 0) reset(); }
+        else {
+          let span = dt * o.speed * 1.6;
+          while (span > 0) {
+            const ds = Math.min(span, 0.01); span -= ds;
+            const vc = rate(st.y);
+            st.th += -(o.k / vc) * Math.cos(st.th) * ds;   // bend toward slower clocks
+            st.x += Math.cos(st.th) * ds; st.y += Math.sin(st.th) * ds; st.s += ds;
+            const ny = Math.cos(st.th) * L / 2;
+            st.top += ds * rate(st.y + ny) / vc; st.bot += ds * rate(st.y - ny) / vc;
+            if (st.s >= st.nextFront) { st.nextFront += 0.55; frontPts.push(...frontEnds()); }
+            if (st.y - Math.abs(ny) <= 0.02 || st.x >= XMAX) { hold = 2; break; }
+          }
+          pathPts.push(new THREE.Vector3(st.x, st.y, 0));
+        }
+        // Draw
+        const [a, b] = frontEnds();
+        rod.geometry.setFromPoints([a, b]); apple.position.set(st.x, st.y, 0.02);
+        clocks.forEach((c, i) => c.position.lerpVectors(b, a, i / (NC - 1)));
+        sideApple.position.set(sx, st.y, 0);
+        path.geometry.dispose(); path.geometry = new THREE.BufferGeometry().setFromPoints(pathPts);
+        fronts.geometry.dispose(); fronts.geometry = new THREE.BufferGeometry().setFromPoints(frontPts);
+        const ticks = v => (v * 10).toFixed(1);
+        setTag(topTag, `top clock ${ticks(st.top)}`); topTag.position.copy(a).add(new THREE.Vector3(0, 0.35, 0));
+        setTag(botTag, `bottom clock ${ticks(st.bot)}`); botTag.position.copy(b).add(new THREE.Vector3(0, -0.35, 0));
+        const lead = (st.top - st.bot) * 10;
+        readout(o.k === 0 ? 'every clock ticks at the same rate, so the apple goes straight into the future and never falls'
+          : hold > 0 ? 'the apple has reached the ground' : `the top clock is ${lead.toFixed(2)} ticks ahead of the bottom one, so the apple keeps turning toward the ground · height ${st.y.toFixed(2)}`);
+      },
+    };
+    function frontEnds() {
+      const nx = -Math.sin(st.th) * L / 2, ny = Math.cos(st.th) * L / 2;
+      return [new THREE.Vector3(st.x + nx, st.y + ny, 0.01), new THREE.Vector3(st.x - nx, st.y - ny, 0.01)];
+    }
+  }
+
+  // ---- The apple's point of view: the same fall seen from the ground and from the apple ----
+  function buildElevator(placeCamera) {
+    if (placeCamera) { camera.position.set(0, 2.6, 18); controls.target.set(0, 2.3, 0); }
+    const g = 2, H0 = 4, TL = Math.sqrt(2 * H0 / g), CX = 4.3, R = 0.32;
+    const lab = (t, p, c, s = 0.34) => { const l = label(t, { size: s, color: c }); l.position.set(...p); world.add(l); return l; };
+    world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 6, 0)]), new THREE.LineBasicMaterial({ color: 0x8a90a8, transparent: true, opacity: 0.35 })));
+    lab('Standing on the ground', [-CX, 5.9, 0], '#e7e9f0', 0.42);
+    lab('Riding along with the apple', [CX, 5.9, 0], '#e7e9f0', 0.42);
+    const makeGround = () => {
+      const gr = new THREE.Group();
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.8, 2.2), new THREE.MeshBasicMaterial({ color: 0x1b2c26 })); slab.position.y = -0.4; gr.add(slab);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 1.3, 16), new THREE.MeshBasicMaterial({ color: 0x8cc2ff })); body.position.set(-1.6, 0.65, 0); gr.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), new THREE.MeshBasicMaterial({ color: 0x8cc2ff })); head.position.set(-1.6, 1.55, 0); gr.add(head);
+      const tag = label('you: 1 g, the ground pushes you up', { size: 0.26, color: '#8cc2ff' }); tag.position.set(-1.0, 2.1, 0); gr.add(tag);
+      return gr;
+    };
+    const makeApple = () => {
+      const gr = new THREE.Group();
+      gr.add(new THREE.Mesh(new THREE.SphereGeometry(R, 24, 16), new THREE.MeshBasicMaterial({ color: 0xd94c3d })));
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.18, 6), new THREE.MeshBasicMaterial({ color: 0x6b4b2a })); stem.position.y = R + 0.06; gr.add(stem);
+      const tag = label('apple: 0 g, weightless', { size: 0.26, color: '#ffb366' }); tag.position.set(1.55, 0, 0); gr.add(tag);
+      return gr;
+    };
+    const groundL = makeGround(), appleL = makeApple(), groundR = makeGround(), appleR = makeApple();
+    groundL.position.x = -CX; appleL.position.set(-CX + 0.4, H0, 0);
+    groundR.position.x = CX; appleR.position.set(CX + 0.4, H0, 0);
+    world.add(groundL, appleL, groundR, appleR);
+    lab('the apple speeds up downward', [-CX, -1.2, 0], '#8a90a8', 0.3);
+    lab('the apple floats; the ground speeds up toward it', [CX, -1.2, 0], '#8a90a8', 0.3);
+    // Snapshots every 0.25 s: apple positions on the left, ground positions on the right
+    const trailL = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xd94c3d, size: 6, sizeAttenuation: false, transparent: true, opacity: 0.6 }));
+    const trailR = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x8cc2ff, transparent: true, opacity: 0.35 }));
+    world.add(trailL, trailR);
+    let t = 0, snaps = [];
+    return {
+      ui: () => [
+        slider({ id: 'fspeed', label: 'Animation speed', min: 0.2, max: 2, step: 0.05, value: o.speed, fmt: v => `${(+v).toFixed(2)}×`, oninput: v => { o.speed = v; } }),
+        h('p', { class: 'small' }, 'Both sides show the same moments. On the left, the usual story: the apple speeds up toward the ground. On the right, the view from the apple: it just floats, and the ground with you on it speeds up toward it.'),
+        h('p', { class: 'small' }, 'Which is right? An accelerometer settles it. One riding on the apple reads zero: nothing is pushing the apple, it is simply following its straightest path into the future. One in your pocket reads 1 g: the ground is pushing you up, off your own straightest path. Your weight is that push.'),
+      ],
+      update(dt) {
+        t += dt * o.speed * 0.8;
+        const tt = Math.min(t, TL), d = g * tt * tt / 2;
+        appleL.position.y = H0 - d;
+        groundR.position.y = d;
+        if (!snaps.length || tt - snaps[snaps.length - 1] >= 0.25 && t <= TL) snaps.push(tt);
+        trailL.geometry.dispose(); trailL.geometry = new THREE.BufferGeometry().setFromPoints(snaps.map(s => new THREE.Vector3(-CX + 0.4, H0 - g * s * s / 2, 0)));
+        trailR.geometry.dispose(); trailR.geometry = new THREE.BufferGeometry().setFromPoints(snaps.flatMap(s => { const y = g * s * s / 2; return [new THREE.Vector3(CX - 3.3, y, 0), new THREE.Vector3(CX + 3.3, y, 0)]; }));
+        if (t > TL + 1.6) { t = 0; snaps = []; }
+        readout(`time ${tt.toFixed(2)} s · on the left the apple has dropped ${d.toFixed(2)} · on the right the ground has risen ${d.toFixed(2)}: the same motion, described two ways`);
+      },
+    };
   }
 
   // ---- Thrown ball: every path from launch to catch, scored by its own clock ----
@@ -1320,7 +1468,7 @@ function makeFall() {
     update(dt) { api.update(dt); },
     get hint() { return o.mode === 'aging' ? 'Drag the orange handle to change the path · drag elsewhere to orbit · scroll to zoom' : 'Drag to orbit · scroll to zoom'; },
     ui: () => [
-      seg({ label: 'Show', options: [['aging', 'A thrown ball'], ['pair', 'Two masses']], value: o.mode, onchange: v => { o.mode = v; build(true); refreshControls(); } }),
+      seg({ label: 'Show', options: [['steer', 'Steering apple'], ['elevator', "Apple's view"], ['aging', 'Thrown ball'], ['pair', 'Two masses']], value: o.mode, onchange: v => { o.mode = v; build(true); refreshControls(); } }),
       ...api.ui(),
     ],
     dispose() { api?.dispose?.(); },
@@ -1335,10 +1483,10 @@ const SCENES = [
     seeing: 'Every pixel traces one ray of light backward from the camera along its true curved path around a non-spinning black hole. The far side of the glowing disk shows up bent over the top and under the bottom. The thin bright ring hugging the shadow is light that circled the hole before reaching you. The side of the disk moving toward you looks brighter and bluer; the side moving away looks dimmer and redder.',
     leaves: 'Real black holes spin, which squashes one side of the shadow. The disk is an idealized thin sheet with made-up texture, and its colors are stylized rather than a true spectrum.',
     tip: 'Switch the background to Grid sky, then turn gravity off and on to see exactly how the sky gets rearranged.' },
-  { id: 'fall', name: 'Why things fall', sub: 'The path where your clock ticks the most', exact: false, make: makeFall,
-    seeing: 'A spacetime diagram of a ball thrown up and caught 2 seconds later, with time running to the right. Tick marks show clocks running faster higher up. Drag the orange handle to try other paths between the same launch and catch: each path collects ticks on its own clock, and the real throw (blue) always collects the most. Going higher gains time from faster clocks; moving faster to get there loses time. The real arc is the exact balance. In Two masses, worldlines that start side by side, both pointing straight into the future, drift together with nothing pushing them.',
-    leaves: 'Clock differences are exaggerated about 10¹⁵ times. This uses general relativity’s weak-gravity approximation, which is exactly where Newton’s laws come from, and the two-masses view uses Newton’s equations for the motion.',
-    tip: 'Drag the handle above the blue path: the faster clocks up high can’t make up for the extra speed you need to get there.' },
+  { id: 'fall', name: 'Why things fall', sub: 'Clocks that tick at different rates', exact: false, make: makeFall,
+    seeing: 'Four ways to see why an apple falls. Steering apple: the apple is a stack of clocks moving into the future; its top clocks tick faster than its bottom ones, so it turns toward the slower side, which is the ground. Apple’s view: the same fall from the ground and from the apple, which feels no force at all. Thrown ball: of every path between a throw and a catch, the real one collects the most time on its own clock. Two masses: worldlines that start side by side drift together with nothing pushing them.',
+    leaves: 'Clock differences are exaggerated enormously; near Earth, a clock one meter higher gains about one second every 300 million years. This uses general relativity’s weak-gravity limit, which is exactly where Newton’s laws come from, and it leaves out the small bending of space that matters only for fast things like light.',
+    tip: 'In Steering apple, tick “Make every clock tick at the same rate” and watch the apple stop falling.' },
   { id: 'grid', name: 'Warped grid and clocks', sub: 'Measured distance and slowed time', exact: true, make: makeGrid,
     seeing: 'A cube of grid lines spaced by true, measured distance. Near a compact mass there is more room between two nested spheres than their sizes suggest, so equal measured steps crowd together in this picture. The clocks tick at the rate general relativity predicts, and the line colors show the same slowdown.',
     leaves: 'Curved 3D space can’t be drawn exactly in flat 3D, so this shows one honest property, distance measured straight outward, and ignores the rest. For everyday gravity, the slowing of time does most of the work of making things fall; the clocks and colors show it, the shape does not.',
