@@ -1,0 +1,1178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Beyond the Rubber Sheet</title>
+<meta name="description" content="Six interactive 3D views of curved spacetime computed from general relativity: black hole lensing, warped space and slowed clocks, orbits, light cones, tidal stretching and gravitational waves.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;1,6..72,500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: scene list | live 3D stage | notes and controls; stacks on phones.
+   Deliberately single dark theme: this is a view into space. */
+:root {
+  --ink: #090b12;
+  --stage: #030409;
+  --panel: #10131d;
+  --line: #232839;
+  --fg: #e7e9f0;
+  --muted: #8a90a8;
+  --accent: #ffb366;
+  --cool: #8cc2ff;
+  --accent-soft: rgba(255, 179, 102, 0.13);
+  --display: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--ink); color: var(--fg); font-family: var(--body); font-size: 14px; line-height: 1.5; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 340px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header h1 { font-family: var(--display); font-weight: 500; font-size: 30px; line-height: 1.1; letter-spacing: -0.01em; margin: 0; }
+header h1 em { color: var(--accent); }
+header p { margin: 0; color: var(--muted); }
+.back { color: var(--muted); text-decoration: none; font-size: 12.5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; align-self: center; }
+.back:hover { color: var(--accent); border-color: var(--accent); }
+
+.catalog { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+.item { display: flex; flex-direction: column; gap: 1px; background: none; border: 0; border-radius: 8px; padding: 9px 12px; text-align: left; cursor: pointer; }
+.item:hover { background: var(--panel); }
+.item b { font-weight: 500; }
+.item span { font-size: 12.5px; color: var(--muted); }
+.item[aria-current="true"] { background: var(--accent-soft); }
+.item[aria-current="true"] b { color: var(--accent); }
+
+.stage { position: relative; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--stage); }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.overlay { position: absolute; font-family: var(--mono); font-size: 11.5px; background: rgba(3, 4, 9, 0.74); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; pointer-events: none; font-variant-numeric: tabular-nums; }
+#readout { left: 10px; bottom: 10px; max-width: calc(100% - 20px); white-space: pre-wrap; }
+#hint { right: 10px; top: 10px; color: var(--muted); max-width: calc(100% - 20px); }
+.fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+
+.panel { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 11px; }
+.badge { align-self: flex-start; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 999px; padding: 2px 9px; border: 1px solid currentColor; }
+.badge.exact { color: var(--cool); }
+.badge.approx { color: var(--accent); }
+.card h2 { font-family: var(--display); font-weight: 500; font-size: 26px; line-height: 1.15; margin: 0; text-wrap: balance; }
+.card h4 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.card p { margin: 0; }
+.leaves { color: var(--muted); font-size: 13px; }
+.tip { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+.tip b { color: var(--fg); font-weight: 600; }
+
+.ctl { display: flex; flex-direction: column; gap: 3px; }
+.ctl label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.ctl output { font-family: var(--mono); font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn { background: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12.5px; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1d1206; font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); color: #1d1206; }
+.seg { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { flex: 1 1 auto; background: var(--ink); border: 0; border-right: 1px solid var(--line); padding: 5px 8px; cursor: pointer; font-size: 12.5px; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.check input { accent-color: var(--accent); }
+.legend { height: 10px; border-radius: 3px; }
+.legend-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.small { font-size: 12px; color: var(--muted); }
+
+@media (max-width: 1150px) { .app { grid-template-columns: 210px minmax(0, 1fr) 300px; } }
+@media (max-width: 900px) {
+  html, body { height: auto; }
+  .app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .catalog { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+  .item { border: 1px solid var(--line); white-space: nowrap; }
+  .item span { display: none; }
+  .stage { height: 64vh; min-height: 340px; }
+  #hint { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <a class="back" href="../">← FunStuff</a>
+    <h1>Beyond the <em>Rubber Sheet</em></h1>
+    <p>Six 3D views of curved spacetime, each computed from general relativity.</p>
+  </header>
+  <nav class="catalog" id="catalog" aria-label="Scenes"></nav>
+  <main class="stage" id="stage">
+    <canvas id="c" aria-label="3D scene"></canvas>
+    <div class="overlay" id="hint"></div>
+    <div class="overlay" id="readout"></div>
+    <div class="fail" id="fail" hidden></div>
+  </main>
+  <aside class="panel">
+    <section class="card" id="info"></section>
+    <section class="card" id="controls"></section>
+  </aside>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// Units throughout: G = c = 1 and the Schwarzschild radius r_s = 1, so M = 1/2.
+const M = 0.5;
+
+// ---------- dom helpers ----------
+const $ = s => document.querySelector(s);
+function h(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+}
+function slider({ id, label, min, max, step, value, fmt = v => v, oninput }) {
+  const out = h('output', {}, fmt(value));
+  const inp = h('input', { type: 'range', id, min, max, step });
+  inp.value = value;
+  inp.addEventListener('input', () => { const v = parseFloat(inp.value); out.textContent = fmt(v); oninput(v); });
+  return h('div', { class: 'ctl' }, h('label', { for: id }, h('span', {}, label), out), inp);
+}
+function check({ id, label, checked, onchange }) {
+  return h('label', { class: 'check' }, h('input', { type: 'checkbox', id, checked, onchange: e => onchange(e.target.checked) }), label);
+}
+function seg({ label, options, value, onchange }) {
+  const wrap = h('div', { class: 'seg', role: 'group', 'aria-label': label });
+  const set = v => { for (const b of wrap.children) b.setAttribute('aria-pressed', b.dataset.v === String(v) ? 'true' : 'false'); };
+  for (const [v, text] of options) wrap.append(h('button', { 'data-v': v, onclick: () => { set(v); onchange(v); } }, text));
+  set(value);
+  return h('div', { class: 'ctl' }, h('label', {}, h('span', {}, label)), wrap);
+}
+const buttons = list => h('div', { class: 'row' }, list.map(([text, fn, primary]) => h('button', { class: primary ? 'btn primary' : 'btn', onclick: fn }, text)));
+
+// ---------- renderer & shared 3D helpers ----------
+const canvas = $('#c'), stage = $('#stage');
+let renderer = null;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setClearColor(0x030409);
+  renderer.localClippingEnabled = true;
+} catch (e) {
+  const f = $('#fail'); f.hidden = false; f.textContent = 'This page needs WebGL, which this browser could not start. Try a current Chrome, Edge, Safari or Firefox.';
+}
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+let readoutText = '';
+const readout = t => { if (t !== readoutText) { readoutText = t; $('#readout').textContent = t; } };
+
+function glowMaterial(color, power = 2.6, strength = 1.2) {
+  return new THREE.ShaderMaterial({
+    uniforms: { c: { value: new THREE.Color(color) }, p: { value: power }, s: { value: strength } },
+    vertexShader: 'varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
+    fragmentShader: 'uniform vec3 c; uniform float p, s; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), p); gl_FragColor = vec4(c*f*s, f); }',
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+}
+function blackHole(r = 1, glow = 0xff9a4d) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(r, 48, 32), new THREE.MeshBasicMaterial({ color: 0x000000 })));
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(r * 1.035, 48, 32), glowMaterial(glow));
+  g.add(halo);
+  return g;
+}
+function circle(r, color, { opacity = 0.6, dashed = false, y = 0 } = {}) {
+  const pts = [];
+  for (let i = 0; i <= 160; i++) { const a = i / 160 * Math.PI * 2; pts.push(new THREE.Vector3(r * Math.cos(a), y, r * Math.sin(a))); }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = dashed ? new THREE.LineDashedMaterial({ color, dashSize: 0.22, gapSize: 0.16, transparent: true, opacity })
+    : new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+  const line = new THREE.Line(geo, mat);
+  if (dashed) line.computeLineDistances();
+  return line;
+}
+function polarGrid(radius, rings, sectors, opacity = 0.18) {
+  const g = new THREE.PolarGridHelper(radius, sectors, rings, 96, 0x8a90a8, 0x8a90a8);
+  g.material.transparent = true; g.material.opacity = opacity; g.material.depthWrite = false;
+  return g;
+}
+function label(text, { size = 0.45, color = '#c9cdda' } = {}) {
+  const c = document.createElement('canvas'), ctx = c.getContext('2d'), fs = 48;
+  const font = `500 ${fs}px "IBM Plex Sans", system-ui, sans-serif`;
+  ctx.font = font;
+  c.width = Math.ceil(ctx.measureText(text).width) + 24; c.height = fs + 22;
+  ctx.font = font; ctx.fillStyle = color; ctx.textBaseline = 'middle'; ctx.fillText(text, 12, c.height / 2);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  s.scale.set(size * c.width / c.height, size, 1);
+  return s;
+}
+function disposeTree(obj) {
+  obj.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of mats) { if (m.map) m.map.dispose(); m.dispose(); }
+  });
+}
+function makeControls(camera, target = [0, 0, 0]) {
+  const c = new OrbitControls(camera, canvas);
+  c.enableDamping = true; c.dampingFactor = 0.08; c.target.set(...target);
+  return c;
+}
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ======================================================================
+// 1. Black hole lensing: ray-traced null geodesics on the GPU
+// ======================================================================
+const LENS_FS = `
+precision highp float;
+varying vec2 vUv;
+uniform vec3 uCamPos; uniform mat3 uCamRot;
+uniform float uTanFov, uAspect, uGravity, uDisk, uDoppler, uIn, uOut, uTime;
+uniform int uBg;
+
+float hash31(vec3 p){ p = fract(p*0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x + p.y)*p.z); }
+float hash21(vec2 p){ vec3 p3 = fract(vec3(p.xyx)*0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y)*p3.z); }
+float noise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0 - 2.0*f);
+  return mix(mix(hash21(i), hash21(i + vec2(1,0)), u.x), mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), u.x), u.y); }
+
+vec3 starLayer(vec3 d, float scale, float keep){
+  vec3 q = d*scale, id = floor(q), f = fract(q) - 0.5;
+  if (hash31(id) < 1.0 - keep) return vec3(0.0);
+  vec3 o = vec3(hash31(id + 1.7), hash31(id + 4.3), hash31(id + 9.1)) - 0.5;
+  float b = smoothstep(0.13, 0.0, length(f - o*0.7)) * (0.35 + 0.65*hash31(id + 2.9));
+  return mix(vec3(1.0, 0.78, 0.6), vec3(0.72, 0.84, 1.0), hash31(id + 5.5)) * b * 1.7;
+}
+vec3 stars(vec3 d){
+  vec3 c = starLayer(d, 28.0, 0.035)*1.4 + starLayer(d, 70.0, 0.07) + starLayer(d, 160.0, 0.05)*0.6;
+  float band = exp(-pow((d.y*0.85 + d.x*0.3)*3.0, 2.0));
+  float n = noise(vec2(atan(d.z, d.x)*5.0, d.y*12.0))*0.6 + noise(vec2(atan(d.z, d.x)*13.0, d.y*31.0))*0.4;
+  return c + vec3(0.34, 0.29, 0.45)*band*(0.15 + 0.55*n)*0.4;
+}
+vec3 gridSky(vec3 d){
+  float a = acos(clamp(d.y, -1.0, 1.0))/3.14159265*18.0, b = (atan(d.z, d.x)/3.14159265 + 1.0)*18.0;
+  float line = max(smoothstep(0.43, 0.49, abs(fract(a) - 0.5)), smoothstep(0.43, 0.49, abs(fract(b) - 0.5)));
+  vec3 base = mix(vec3(0.04, 0.05, 0.09), vec3(0.08, 0.09, 0.15), mod(floor(a) + floor(b), 2.0));
+  vec3 tint = d.y > 0.0 ? vec3(0.35, 0.6, 1.0) : vec3(1.0, 0.55, 0.25);
+  return base + tint*line*0.85;
+}
+vec3 heat(float t){
+  t = clamp(t, 0.0, 2.6);
+  vec3 c = mix(vec3(0.45, 0.04, 0.0), vec3(1.0, 0.42, 0.07), smoothstep(0.0, 0.6, t));
+  c = mix(c, vec3(1.0, 0.86, 0.62), smoothstep(0.55, 1.15, t));
+  return mix(c, vec3(0.72, 0.84, 1.0), smoothstep(1.15, 2.1, t));
+}
+vec4 disk(vec3 p, vec3 dir){
+  float r = length(p.xz);
+  float om = 0.70710678/pow(r, 1.5);                  // Keplerian angular speed, sqrt(M/r^3)
+  float a = -om*uTime, ca = cos(a), sa = sin(a);
+  vec2 q = vec2(ca*p.x - sa*p.z, sa*p.x + ca*p.z);     // texture rotated with the gas
+  float tex = noise(q*1.6)*0.55 + noise(q*4.5)*0.3 + noise(q*11.0)*0.15;
+  float rings = 0.7 + 0.3*noise(vec2(r*7.0, 1.3));
+  float T = pow(uIn/r, 0.75)*1.15;
+  float edge = smoothstep(uIn, uIn*1.12, r)*(1.0 - smoothstep(uOut*0.7, uOut, r));
+  float v = min(sqrt(0.5/max(r - 1.0, 0.02)), 0.98);  // orbital speed seen by a static observer
+  float gam = 1.0/sqrt(1.0 - v*v);
+  vec3 vhat = vec3(-p.z, 0.0, p.x)/r;
+  vec3 n = -normalize(dir);                            // photon direction at emission, toward the camera
+  float g = sqrt(1.0 - 1.0/r)/(gam*(1.0 - v*dot(vhat, n)));
+  g = mix(1.0, g, uDoppler);
+  vec3 col = heat(T*g)*pow(g, 3.0)*(0.45 + 0.9*tex)*rings*1.5;
+  return vec4(col, edge*clamp(0.3 + 0.8*tex, 0.0, 1.0));
+}
+void main(){
+  vec2 ndc = vUv*2.0 - 1.0;
+  vec3 dir = normalize(uCamRot*vec3(ndc.x*uTanFov*uAspect, ndc.y*uTanFov, -1.0));
+  vec3 pos = uCamPos;
+  vec3 L = cross(pos, dir);
+  float h2 = dot(L, L);
+  vec3 col = vec3(0.0); float trans = 1.0; bool hole = false;
+  for (int i = 0; i < 520; i++) {
+    float r = length(pos);
+    if (r < 1.0) { hole = true; break; }
+    float dt = clamp(0.045*r*(r - 0.85), 0.008, 1.6);
+    // Exact photon orbits: Binet's equation u'' + u = 3Mu^2 written as a 3D force law
+    vec3 acc = -1.5*h2*pos/pow(r, 5.0)*uGravity;
+    vec3 vh = dir + 0.5*dt*acc;
+    vec3 np = pos + vh*dt;
+    float nr = length(np);
+    dir = vh + 0.5*dt*(-1.5*h2*np/pow(nr, 5.0)*uGravity);
+    if (uDisk > 0.5 && pos.y*np.y <= 0.0 && pos.y != np.y) {
+      vec3 hit = mix(pos, np, pos.y/(pos.y - np.y));
+      float rh = length(hit.xz);
+      if (rh > uIn && rh < uOut) {
+        vec4 dc = disk(hit, dir);
+        col += trans*dc.rgb*dc.a; trans *= 1.0 - dc.a;
+        if (trans < 0.02) break;
+      }
+    }
+    pos = np;
+    if (nr > 90.0 && dot(pos, dir) > 0.0) break;
+  }
+  if (!hole && trans > 0.02) {
+    vec3 d = normalize(dir);
+    col += trans*(uBg == 0 ? stars(d) : uBg == 1 ? gridSky(d) : vec3(0.0));
+  }
+  col = col/(1.0 + col*0.55);
+  gl_FragColor = vec4(pow(col, vec3(0.92)), 1.0);
+}`;
+
+function makeLensing() {
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+  camera.position.set(0, 1.5, 17);
+  const controls = makeControls(camera);
+  controls.minDistance = 2.4; controls.maxDistance = 70; controls.enablePan = false; controls.autoRotateSpeed = 0.35;
+  const o = { gravity: true, disk: true, doppler: true, bg: 0, inner: 3, outer: 12, quality: 1, spin: true };
+  const U = {
+    uCamPos: { value: new THREE.Vector3() }, uCamRot: { value: new THREE.Matrix3() }, uTanFov: { value: 0 }, uAspect: { value: 1 },
+    uGravity: { value: 1 }, uDisk: { value: 1 }, uDoppler: { value: 1 }, uBg: { value: 0 }, uIn: { value: 3 }, uOut: { value: 12 }, uTime: { value: 0 },
+  };
+  const scene = new THREE.Scene();
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+    uniforms: U, depthTest: false, depthWrite: false,
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: LENS_FS,
+  })));
+  const flat = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  let time = 0;
+  return {
+    scene, camera, controls, renderCamera: flat,
+    get pixelRatio() { return [DPR, 1, 0.6][o.quality]; },
+    update(dt) {
+      if (o.spin) time += dt * 6;
+      camera.updateMatrixWorld();
+      U.uCamPos.value.copy(camera.position);
+      U.uCamRot.value.setFromMatrix4(camera.matrixWorld);
+      U.uTanFov.value = Math.tan(camera.fov * Math.PI / 360);
+      U.uAspect.value = camera.aspect;
+      U.uGravity.value = o.gravity ? 1 : 0; U.uDisk.value = o.disk ? 1 : 0; U.uDoppler.value = o.doppler ? 1 : 0;
+      U.uBg.value = o.bg; U.uIn.value = o.inner; U.uOut.value = o.outer; U.uTime.value = time;
+      readout(`camera ${camera.position.length().toFixed(1)} r_s from the center   ·   ${fps.toFixed(0)} fps`);
+    },
+    ui: () => [
+      seg({ label: 'Background', options: [[0, 'Stars'], [1, 'Grid sky'], [2, 'None']], value: o.bg, onchange: v => { o.bg = +v; } }),
+      check({ id: 'grav', label: 'Gravity bends light', checked: o.gravity, onchange: v => { o.gravity = v; } }),
+      check({ id: 'disk', label: 'Glowing disk of gas', checked: o.disk, onchange: v => { o.disk = v; } }),
+      check({ id: 'dopp', label: 'Doppler and gravitational color shifts', checked: o.doppler, onchange: v => { o.doppler = v; } }),
+      check({ id: 'spin', label: 'Disk rotates', checked: o.spin, onchange: v => { o.spin = v; } }),
+      slider({ id: 'inner', label: 'Disk inner edge', min: 1.5, max: 8, step: 0.05, value: o.inner, fmt: v => `${(+v).toFixed(2)} r_s`, oninput: v => { o.inner = v; if (o.outer < v + 1) o.outer = v + 1; } }),
+      slider({ id: 'outer', label: 'Disk outer edge', min: 4, max: 30, step: 0.1, value: o.outer, fmt: v => `${(+v).toFixed(1)} r_s`, oninput: v => { o.outer = Math.max(v, o.inner + 1); } }),
+      check({ id: 'auto', label: 'Circle the camera slowly', checked: controls.autoRotate, onchange: v => { controls.autoRotate = v; } }),
+      seg({ label: 'Resolution', options: [[0, 'Sharp'], [1, 'Balanced'], [2, 'Fast']], value: o.quality, onchange: v => { o.quality = +v; resize(); } }),
+      h('p', { class: 'small' }, 'Real disks start no closer than 3 r_s, the innermost stable orbit. Drag to fly around, scroll to move closer.'),
+    ],
+    hint: 'Drag to orbit · scroll to move in and out',
+  };
+}
+
+// ======================================================================
+// 2. Warped grid and clocks: proper radial distance + gravitational time dilation
+// ======================================================================
+const BODIES = [
+  ['Earth', 1.39e-9], ['Sun', 4.24e-6], ['White dwarf', 3e-4], ['Neutron star', 0.4], ['Black hole', 1],
+];
+function rateColor(f, out) {
+  // Log scale of how much slower clocks run: 1e-10 slower (cool) up to stopped (red)
+  const x = -Math.log10(Math.max(1 - f, 1e-16));
+  const t = Math.pow(clamp((10.5 - x) / 10.5, 0, 1), 0.85);
+  const stops = [[0, [0.55, 0.74, 1.0]], [0.45, [0.93, 0.92, 0.9]], [0.75, [1.0, 0.68, 0.36]], [1, [1.0, 0.3, 0.2]]];
+  for (let i = 1; i < stops.length; i++) if (t <= stops[i][0]) {
+    const [t0, c0] = stops[i - 1], [t1, c1] = stops[i], k = (t - t0) / (t1 - t0);
+    out[0] = lerp(c0[0], c1[0], k); out[1] = lerp(c0[1], c1[1], k); out[2] = lerp(c0[2], c1[2], k); return out;
+  }
+  out[0] = 1; out[1] = 0.3; out[2] = 0.2; return out;
+}
+function fmtRate(f) {
+  const d = 1 - f;
+  if (d < 1e-3) { const e = Math.floor(Math.log10(d)); return `1 − ${(d / 10 ** e).toFixed(1)}×10${sup(e)}`; }
+  return f.toFixed(3);
+}
+const sup = n => String(n).replace(/-/g, '⁻').replace(/\d/g, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]);
+
+function makeGrid() {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 500);
+  camera.position.set(8.5, 5.5, 10);
+  const controls = makeControls(camera); controls.minDistance = 3; controls.maxDistance = 60;
+  const R = 1.2, EXT = 6, STEP = 1.5;
+  const o = { logC: Math.log10(0.4), view: 'lattice', clocks: true };
+  const linesMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false });
+  let lines = null, sheet = null, body = null;
+  const clockGroup = new THREE.Group(); scene.add(clockGroup);
+
+  const C = () => Math.min(1, 10 ** o.logC);
+  // Proper distance from the Schwarzschild radius out to coordinate radius r
+  const S = (r, rs) => rs <= 0 ? r : Math.sqrt(r * (r - rs)) + rs * Math.log(Math.sqrt(r / rs) + Math.sqrt(Math.max(r / rs - 1, 0)));
+  function mapping(rs) {
+    // Table from measured distance rho (surface + proper distance) to coordinate radius r
+    const n = 4000, rmax = EXT * Math.sqrt(3) + 0.5, rr = new Float64Array(n), rho = new Float64Array(n), S0 = S(R, rs);
+    for (let i = 0; i < n; i++) { const r = R + (rmax - R) * (i / (n - 1)) ** 2; rr[i] = r; rho[i] = R + (S(r, rs) - S0); }
+    return p => {
+      if (p <= R) return null;
+      let lo = 0, hi = n - 1;
+      if (p >= rho[hi]) return rr[hi] + (p - rho[hi]);
+      while (hi - lo > 1) { const m = (lo + hi) >> 1; if (rho[m] < p) lo = m; else hi = m; }
+      return lerp(rr[lo], rr[hi], (p - rho[lo]) / (rho[hi] - rho[lo]));
+    };
+  }
+  function build() {
+    const c = C(), rs = c * R, rOf = mapping(rs), pos = [], col = [], tmp = [0, 0, 0];
+    const addLine = (a, b) => {
+      const N = 60; let prev = null;
+      for (let i = 0; i <= N; i++) {
+        const p = [lerp(a[0], b[0], i / N), lerp(a[1], b[1], i / N), lerp(a[2], b[2], i / N)];
+        const rho = Math.hypot(...p), r = rOf(rho);
+        const q = r == null ? null : p.map(v => v * r / rho);
+        if (q && prev) {
+          for (const [pt, rad] of [[prev, prev.r], [q, r]]) {
+            pos.push(pt[0], pt[1], pt[2]); rateColor(Math.sqrt(Math.max(1 - rs / rad, 0)), tmp);
+            // Fade the outer lattice so the warped middle stays readable
+            col.push(...tmp, o.view === 'lattice' ? clamp(1.25 - rad / EXT, 0.12, 1) : 0.9);
+          }
+        }
+        if (q) q.r = r;
+        prev = q;
+      }
+    };
+    const ys = o.view === 'lattice' ? range(-EXT, EXT) : [0];
+    for (const y of ys) for (const z of range(-EXT, EXT)) addLine([-EXT, y, z], [EXT, y, z]);
+    for (const y of ys) for (const x of range(-EXT, EXT)) addLine([x, y, -EXT], [x, y, EXT]);
+    if (o.view === 'lattice') for (const x of range(-EXT, EXT)) for (const z of range(-EXT, EXT)) addLine([x, -EXT, z], [x, EXT, z]);
+    if (lines) { scene.remove(lines); lines.geometry.dispose(); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    lines = new THREE.LineSegments(g, linesMat);
+    lines.visible = o.view !== 'sheet';
+    scene.add(lines);
+    buildSheet(rs); buildBody(c); buildClocks(rs, rOf);
+  }
+  const range = (a, b) => Array.from({ length: Math.round((b - a) / STEP) + 1 }, (_, i) => a + i * STEP);
+  function buildSheet(rs) {
+    if (sheet) { scene.remove(sheet); disposeTree(sheet); sheet = null; }
+    if (o.view !== 'sheet') return;
+    // Flamm's paraboloid: the equatorial slice embedded in a fictitious extra dimension
+    const Z = r => 2 * Math.sqrt(Math.max(rs * (r - rs), 0)), rmax = EXT * 1.35, NR = 40, NA = 72;
+    const pos = [], col = [], idx = [], tmp = [0, 0, 0], lp = [];
+    for (let i = 0; i <= NR; i++) {
+      const r = R + (rmax - R) * (i / NR) ** 1.6, y = Z(r) - Z(rmax);
+      rateColor(Math.sqrt(1 - rs / r), tmp);
+      for (let j = 0; j <= NA; j++) { const a = j / NA * Math.PI * 2; pos.push(r * Math.cos(a), y, r * Math.sin(a)); col.push(...tmp); }
+    }
+    for (let i = 0; i < NR; i++) for (let j = 0; j < NA; j++) { const a = i * (NA + 1) + j, b = a + NA + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+    sheet = new THREE.Group();
+    sheet.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })));
+    sheet.add(new THREE.Mesh(g.clone(), new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true, transparent: true, opacity: 0.55 })));
+    sheet.position.y = 0;
+    scene.add(sheet);
+    // Lower the body to sit at the bottom of the funnel
+    sheet.userData.bottom = Z(R) - Z(rmax);
+  }
+  function buildBody(c) {
+    if (body) { scene.remove(body); disposeTree(body); }
+    if (c >= 0.999) body = blackHole(R);
+    else {
+      const color = c < 1e-7 ? 0x3f7fd6 : c < 1e-4 ? 0xffb347 : c < 0.01 ? 0xe9eefc : 0xbfd8ff;
+      body = new THREE.Group();
+      body.add(new THREE.Mesh(new THREE.SphereGeometry(R, 48, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(0.35) })));
+      body.add(new THREE.Mesh(new THREE.SphereGeometry(R * 1.01, 48, 32), glowMaterial(color, 1.6, 1.4)));
+    }
+    if (sheet) body.position.y = sheet.userData.bottom;
+    scene.add(body);
+  }
+  const clocks = [];
+  function buildClocks(rs, rOf) {
+    disposeTree(clockGroup); clockGroup.clear(); clocks.length = 0;
+    if (!o.clocks) return;
+    const flatView = o.view !== 'lattice';
+    const dir = new THREE.Vector3(1, flatView ? 0 : 0.55, 0.75).normalize();
+    const dirB = new THREE.Vector3(-0.8, flatView ? 0 : 0.5, 0.4).normalize();
+    const far = new THREE.Vector3(-1, flatView ? 0 : 0.25, -0.6).normalize();
+    const spots = [[R + 0.55, dir], [R + 1.9, dir], [R + 3.8, dir], [R + 0.55, dirB], [flatView ? 7.2 : 10.5, far]];
+    // On the rubber-sheet view, sit each clock on the curved surface
+    const Z = r => 2 * Math.sqrt(Math.max(rs * (r - rs), 0)), zmax = Z(EXT * 1.35);
+    for (const [rho, d] of spots) {
+      const r = rOf(rho) ?? rho, f = Math.sqrt(Math.max(1 - rs / r, 0));
+      const g = new THREE.Group();
+      const tmp = [0, 0, 0]; rateColor(f, tmp); const color = new THREE.Color(...tmp);
+      const CR = 0.5;
+      const face = new THREE.Mesh(new THREE.CircleGeometry(CR, 40), new THREE.MeshBasicMaterial({ color: 0x0b0d16, transparent: true, opacity: 0.85 }));
+      g.add(face);
+      const rim = circle(CR, color, { opacity: 1 }); rim.rotation.x = Math.PI / 2; g.add(rim);
+      const ticks = [];
+      for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; ticks.push(new THREE.Vector3(Math.cos(a) * CR * 0.78, Math.sin(a) * CR * 0.78, 0.01), new THREE.Vector3(Math.cos(a) * CR * 0.94, Math.sin(a) * CR * 0.94, 0.01)); }
+      g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ticks), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 })));
+      const hand = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0.02), new THREE.Vector3(0, CR * 0.82, 0.02)]), new THREE.LineBasicMaterial({ color: 0xffffff }));
+      g.add(hand);
+      const tag = label(rho > 7 ? `far away: 1×` : `${fmtRate(f)}×`, { size: 0.3, color: '#' + color.getHexString() });
+      tag.position.set(0, -CR - 0.25, 0); g.add(tag);
+      g.position.copy(d).multiplyScalar(r);
+      if (o.view === 'sheet') g.position.y = Z(r) - zmax + CR + 0.1;
+      else if (flatView) g.position.y = CR + 0.1;
+      clockGroup.add(g);
+      clocks.push({ g, hand, f, angle: 0 });
+    }
+  }
+  build();
+  let pending = false;
+  const rebuild = () => { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; build(); }); };
+  return {
+    scene, camera, controls,
+    update(dt) {
+      for (const c of clocks) { c.angle -= dt * Math.PI * 2 / 6 * c.f; c.hand.rotation.z = c.angle; c.g.quaternion.copy(camera.quaternion); }
+      const c = C(), rs = c * R, f = Math.sqrt(1 - Math.min(rs / R, 1));
+      readout(c >= 0.999 ? `black hole: clocks at the horizon stop completely, as seen from far away`
+        : `compactness r_s/R = ${c < 0.01 ? c.toExponential(1) : c.toFixed(2)}   ·   a clock on the surface runs ${fmtRate(f)} as fast as one far away`);
+    },
+    ui: () => {
+      const presets = buttons(BODIES.map(([n, c]) => [n, () => { o.logC = Math.log10(c); build(); sl.querySelector('input').value = o.logC; sl.querySelector('output').textContent = fmtC(o.logC); }]));
+      const fmtC = v => { const c = 10 ** v; return c >= 0.999 ? 'black hole' : c < 0.01 ? c.toExponential(1) : c.toFixed(2); };
+      const sl = slider({ id: 'compact', label: 'Compactness, r_s ÷ radius', min: -9.5, max: 0, step: 0.01, value: o.logC, fmt: fmtC, oninput: v => { o.logC = v; rebuild(); } });
+      const stops = [0, 0.25, 0.5, 0.75, 1].map(t => { const x = 10.5 - 10.5 * t ** (1 / 0.85), c = rateColor(1 - 10 ** -x, [0, 0, 0]); return `rgb(${c.map(v => Math.round(v * 255)).join(',')}) ${t * 100}%`; });
+      return [
+        h('h4', {}, 'Mass'), presets, sl,
+        seg({ label: 'View', options: [['lattice', '3D lattice'], ['slice', 'Equator slice'], ['sheet', 'Rubber-sheet shape']], value: o.view, onchange: v => { o.view = v; build(); } }),
+        check({ id: 'clocks', label: 'Show clocks', checked: o.clocks, onchange: v => { o.clocks = v; build(); } }),
+        h('h4', {}, 'Line color: how much slower clocks run'),
+        h('div', { class: 'legend', style: `background:linear-gradient(90deg,${stops.join(',')})` }),
+        h('div', { class: 'legend-labels' }, h('span', {}, '10⁻¹⁰'), h('span', {}, '10⁻⁵'), h('span', {}, '10⁻¹'), h('span', {}, 'stopped')),
+        h('p', { class: 'small' }, 'The rubber-sheet shape is a real thing: it is what the flat equator slice would look like bent into an imaginary fourth dimension so that distances along the surface come out right. Only a 2D slice can be drawn that way.'),
+      ];
+    },
+    hint: 'Drag to orbit · scroll to zoom',
+  };
+}
+
+// ======================================================================
+// 3. Orbit playground: Schwarzschild geodesics for matter and light
+// ======================================================================
+function makeOrbits() {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 800);
+  camera.position.set(0, 26, 22);
+  const controls = makeControls(camera); controls.minDistance = 4; controls.maxDistance = 140;
+  const o = { kind: 'matter', ghost: true, aim: true, speed: 20 };
+  const setAim = () => {
+    controls.mouseButtons = { LEFT: o.aim ? -1 : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: o.aim ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN };
+    controls.touches = { ONE: o.aim ? -1 : THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  };
+  setAim();
+  scene.add(blackHole(1));
+  scene.add(polarGrid(40, 8, 16, 0.12));
+  const ps = circle(1.5, 0xffb366, { opacity: 0.75, dashed: true }); scene.add(ps);
+  const isco = circle(3, 0x8cc2ff, { opacity: 0.6, dashed: true }); scene.add(isco);
+  const l1 = label('light orbit 1.5 r_s', { size: 0.42, color: '#ffb366' }); l1.position.set(0, 0.5, -1.9); scene.add(l1);
+  const l2 = label('last stable orbit 3 r_s', { size: 0.42, color: '#8cc2ff' }); l2.position.set(0, 0.5, -3.45); scene.add(l2);
+
+  const MAXP = 8000, bodies = [];
+  const vc = r => Math.sqrt(M / (r - 3 * M));          // circular orbit speed (proper time) in Schwarzschild
+  const vcN = r => Math.sqrt(M / r);                    // Newtonian circular speed
+  function accel(b, x, y, z, out) {
+    const r2 = x * x + y * y + z * z, r = Math.sqrt(r2), r5 = r2 * r2 * r;
+    const k = b.newton ? M / (r2 * r) : (b.light ? 0 : M / (r2 * r)) + 3 * M * b.h2 / r5;
+    out[0] = -k * x; out[1] = -k * y; out[2] = -k * z;
+  }
+  const A1 = [0, 0, 0], A2 = [0, 0, 0], A3 = [0, 0, 0], A4 = [0, 0, 0];
+  function rk4(b, dt) {
+    const [x, y, z] = b.p, [u, v, w] = b.v;
+    accel(b, x, y, z, A1);
+    const x2 = x + u * dt / 2, y2 = y + v * dt / 2, z2 = z + w * dt / 2, u2 = u + A1[0] * dt / 2, v2 = v + A1[1] * dt / 2, w2 = w + A1[2] * dt / 2;
+    accel(b, x2, y2, z2, A2);
+    const x3 = x + u2 * dt / 2, y3 = y + v2 * dt / 2, z3 = z + w2 * dt / 2, u3 = u + A2[0] * dt / 2, v3 = v + A2[1] * dt / 2, w3 = w + A2[2] * dt / 2;
+    accel(b, x3, y3, z3, A3);
+    const x4 = x + u3 * dt, y4 = y + v3 * dt, z4 = z + w3 * dt, u4 = u + A3[0] * dt, v4 = v + A3[1] * dt, w4 = w + A3[2] * dt;
+    accel(b, x4, y4, z4, A4);
+    b.p[0] += dt / 6 * (u + 2 * u2 + 2 * u3 + u4); b.p[1] += dt / 6 * (v + 2 * v2 + 2 * v3 + v4); b.p[2] += dt / 6 * (w + 2 * w2 + 2 * w3 + w4);
+    b.v[0] += dt / 6 * (A1[0] + 2 * A2[0] + 2 * A3[0] + A4[0]); b.v[1] += dt / 6 * (A1[1] + 2 * A2[1] + 2 * A3[1] + A4[1]); b.v[2] += dt / 6 * (A1[2] + 2 * A2[2] + 2 * A3[2] + A4[2]);
+  }
+  const stepSize = b => { const r = Math.hypot(...b.p); return b.light && !b.newton ? Math.min(0.5, 0.02 * r) : Math.min(0.3, 0.012 * r * Math.sqrt(r)); };
+  // Advances a body by parameter span; returns 'in' | 'out' | null
+  function advance(b, span, onPoint) {
+    let left = span, guard = 0;
+    while (left > 0 && guard++ < 6000) {
+      const h = Math.min(stepSize(b), left); rk4(b, h); left -= h;
+      const r = Math.hypot(...b.p);
+      if (r < 1 && !b.newton) return 'in';
+      if (b.newton && r < 0.3) return 'in';
+      if (r > 90 && b.p[0] * b.v[0] + b.p[1] * b.v[1] + b.p[2] * b.v[2] > 0) return 'out';
+      onPoint && onPoint();
+    }
+    return null;
+  }
+  function makeBody(light, p, v, newton) {
+    const h2 = (p[1] * v[2] - p[2] * v[1]) ** 2 + (p[2] * v[0] - p[0] * v[2]) ** 2 + (p[0] * v[1] - p[1] * v[0]) ** 2;
+    const color = newton ? 0x6f7690 : light ? 0xcfe6ff : 0xffb366;
+    const arr = new Float32Array(MAXP * 3), geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3)); geo.setDrawRange(0, 0);
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: newton ? 0.5 : 0.95 }));
+    line.frustumCulled = false; scene.add(line);
+    let head = null;
+    if (!newton) { head = new THREE.Mesh(new THREE.SphereGeometry(light ? 0.09 : 0.15, 14, 10), new THREE.MeshBasicMaterial({ color })); scene.add(head); }
+    const b = { light, newton, p: [...p], v: [...v], h2, line, arr, n: 0, head, done: null, last: [...p] };
+    push(b);
+    bodies.push(b);
+    return b;
+  }
+  function push(b) {
+    if (b.n >= MAXP) { b.arr.copyWithin(0, 2000 * 3); b.n -= 2000; }
+    b.arr[b.n * 3] = b.p[0]; b.arr[b.n * 3 + 1] = b.p[1]; b.arr[b.n * 3 + 2] = b.p[2]; b.n++;
+    b.last[0] = b.p[0]; b.last[1] = b.p[1]; b.last[2] = b.p[2];
+    b.dirty = true;
+  }
+  function launch(light, p, v) {
+    if (light) { const s = Math.hypot(...v); v = v.map(c => c / s); }
+    makeBody(light, p, v, false);
+    if (o.ghost) makeBody(light, p, v, true);
+  }
+  function clearAll() {
+    for (const b of bodies) { scene.remove(b.line); disposeTree(b.line); if (b.head) { scene.remove(b.head); disposeTree(b.head); } }
+    bodies.length = 0;
+  }
+  // Preview while aiming
+  const prevGeo = new THREE.BufferGeometry(); prevGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6000 * 3), 3)); prevGeo.setDrawRange(0, 0);
+  const preview = new THREE.Line(prevGeo, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.3, gapSize: 0.2, transparent: true, opacity: 0.55 }));
+  preview.frustumCulled = false; scene.add(preview);
+  const arrowGeo = new THREE.BufferGeometry(); arrowGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const arrow = new THREE.Line(arrowGeo, new THREE.LineBasicMaterial({ color: 0xffffff })); arrow.visible = false; scene.add(arrow);
+  let aimStart = null, aimInfo = '';
+  function aimVelocity(start, cur) {
+    const d = [cur.x - start.x, 0, cur.z - start.z], len = Math.hypot(...d);
+    if (len < 0.05) return null;
+    const r = Math.hypot(start.x, start.z), f = len / 6;
+    if (o.kind === 'light') return { v: d.map(c => c / len), f };
+    return { v: d.map(c => c / len * f * vc(Math.max(r, 1.6))), f };
+  }
+  function runPreview(p, v) {
+    const b = { light: o.kind === 'light', newton: false, p: [...p], v: [...v], h2: 0 };
+    b.h2 = (p[1] * v[2] - p[2] * v[1]) ** 2 + (p[2] * v[0] - p[0] * v[2]) ** 2 + (p[0] * v[1] - p[1] * v[0]) ** 2;
+    const arr = prevGeo.attributes.position.array; let n = 0, fate = null, minR = Infinity;
+    const put = () => { if (n < 6000) { arr[n * 3] = b.p[0]; arr[n * 3 + 1] = b.p[1]; arr[n * 3 + 2] = b.p[2]; n++; } };
+    put();
+    for (let k = 0; k < 1500 && !fate; k++) { fate = advance(b, b.light ? 0.6 : 2.5); minR = Math.min(minR, Math.hypot(...b.p)); put(); }
+    prevGeo.setDrawRange(0, n); prevGeo.attributes.position.needsUpdate = true; preview.computeLineDistances();
+    return fate === 'in' ? 'falls into the black hole' : fate === 'out' ? 'escapes to infinity' : `stays bound, closest approach ${minR.toFixed(2)} r_s`;
+  }
+  const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  function hit(e) {
+    const r = canvas.getBoundingClientRect(), v = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(v, camera); const out = new THREE.Vector3();
+    return ray.ray.intersectPlane(plane, out) ? out : null;
+  }
+  const down = e => {
+    if (!o.aim || e.button !== 0) return;
+    const p = hit(e); if (!p || Math.hypot(p.x, p.z) < 1.15) return;
+    aimStart = p; canvas.setPointerCapture(e.pointerId);
+  };
+  const move = e => {
+    if (!aimStart) return;
+    const p = hit(e); if (!p) return;
+    const a = arrowGeo.attributes.position.array; a.set([aimStart.x, 0.02, aimStart.z, p.x, 0.02, p.z]); arrowGeo.attributes.position.needsUpdate = true; arrow.visible = true;
+    const av = aimVelocity(aimStart, p);
+    if (!av) { prevGeo.setDrawRange(0, 0); aimInfo = ''; return; }
+    const fate = runPreview([aimStart.x, 0, aimStart.z], av.v);
+    const r = Math.hypot(aimStart.x, aimStart.z);
+    if (o.kind === 'light') {
+      const b = Math.abs(aimStart.x * av.v[2] - aimStart.z * av.v[0]);
+      aimInfo = `light from ${r.toFixed(1)} r_s · aimed ${b.toFixed(2)} r_s off center (anything under 2.60 is captured) · ${fate}`;
+    } else aimInfo = `start ${r.toFixed(1)} r_s · speed ${av.f.toFixed(2)}× the circular-orbit speed · ${fate}`;
+  };
+  const up = e => {
+    if (!aimStart) return;
+    const p = hit(e), av = p && aimVelocity(aimStart, p);
+    if (av) launch(o.kind === 'light', [aimStart.x, 0, aimStart.z], av.v);
+    aimStart = null; arrow.visible = false; prevGeo.setDrawRange(0, 0); aimInfo = '';
+  };
+  canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', move);
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+
+  const tang = (r, s) => [[r, 0, 0], [0, 0, -s]];
+  const presets = [
+    ['Precessing orbit', () => launch(false, ...tang(10, 0.78 * vc(10)))],
+    ['Circle at 5 r_s', () => launch(false, ...tang(5, vc(5)))],
+    ['Last stable orbit', () => launch(false, ...tang(3, vc(3) * 0.999))],
+    ['Zoom-whirl', () => launch(false, ...tang(12, 0.7145 * vc(12)))],
+    ['Plunge', () => launch(false, ...tang(12, 0.45 * vc(12)))],
+    ['Light ring', () => launch(true, [1.5 * 1.0002, 0, 0], [0, 0, -1])],
+    ['Beam of light', () => { for (let b = 1.2; b <= 6.2; b += 0.5) launch(true, [-40, 0, b], [1, 0, 0]); }],
+    ['Spray of matter', () => { for (let k = 0; k < 9; k++) launch(false, ...tang(8, (0.55 + k * 0.12) * vc(8))); }],
+  ];
+  let stats = { in: 0, out: 0 };
+  return {
+    scene, camera, controls,
+    update(dt) {
+      const span = o.speed * dt;
+      for (const b of bodies) {
+        if (b.done) continue;
+        const fate = advance(b, b.light ? span * 1.3 : span, () => {
+          const d = Math.hypot(b.p[0] - b.last[0], b.p[1] - b.last[1], b.p[2] - b.last[2]);
+          if (d > 0.06) push(b);
+        });
+        push(b);
+        if (fate) { b.done = fate; if (!b.newton) stats[fate]++; if (b.head) b.head.visible = false; }
+        if (b.head) b.head.position.set(...b.p);
+      }
+      for (const b of bodies) if (b.dirty) { b.line.geometry.setDrawRange(0, b.n); b.line.geometry.attributes.position.needsUpdate = true; b.dirty = false; }
+      const live = bodies.filter(b => !b.newton && !b.done).length;
+      readout(aimInfo || `${live} in flight · ${stats.in} fell in · ${stats.out} escaped`);
+    },
+    ui: () => [
+      seg({ label: 'Launch', options: [['matter', 'Matter'], ['light', 'Light']], value: o.kind, onchange: v => { o.kind = v; } }),
+      check({ id: 'aim', label: 'Left-drag on the plane to launch', checked: o.aim, onchange: v => { o.aim = v; setAim(); } }),
+      check({ id: 'ghost', label: 'Also show what Newton predicts (gray)', checked: o.ghost, onchange: v => { o.ghost = v; } }),
+      slider({ id: 'speed', label: 'Simulation speed', min: 2, max: 80, step: 1, value: o.speed, fmt: v => `${v}`, oninput: v => { o.speed = v; } }),
+      h('h4', {}, 'Try one'),
+      buttons(presets),
+      buttons([['Clear', () => { clearAll(); stats = { in: 0, out: 0 }; }, true]]),
+      h('p', { class: 'small' }, 'Distances are in Schwarzschild radii (r_s). The orange dashed ring is where light can orbit; the blue one is the closest stable orbit for matter.'),
+    ],
+    hint: 'Left-drag on the plane to launch · right-drag to turn · scroll to zoom',
+    dispose() {
+      canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up);
+    },
+  };
+}
+
+// ======================================================================
+// 4. Light cones in Eddington–Finkelstein (or Schwarzschild) coordinates
+// ======================================================================
+function makeCones() {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 500);
+  const controls = makeControls(camera); controls.minDistance = 3; controls.maxDistance = 60;
+  const o = { coords: 'ef', animate: true, speed: 1 };
+  const clip = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+  const world = new THREE.Group(); scene.add(world);
+  let T = 0, Tmax = 12, obs = [];
+
+  // Radial infall from rest at r0, integrated in proper time with ingoing EF time (smooth through the horizon)
+  function infall(r0) {
+    const q0 = 1 / r0, pts = [];
+    let r = r0 * (1 - 1e-6), t = 0, tau = 0;
+    const f = rr => { const q = 1 / rr, s = Math.sqrt(Math.max(q - q0, 0)); return [-s, ((1 + q + q * q) - q0 * (1 + q)) / (Math.sqrt(1 - q0) + q * s)]; };
+    pts.push([r, t, tau]);
+    while (r > 0.02) {
+      const d = 0.003 * Math.min(1, r ** 1.5);
+      const k1 = f(r), k2 = f(r + k1[0] * d / 2);
+      r += k2[0] * d; t += k2[1] * d; tau += d;
+      pts.push([r, t, tau]);
+    }
+    return pts;
+  }
+  const tortoise = r => r + Math.log(Math.abs(r - 1));
+  function build() {
+    disposeTree(world); world.clear();
+    const ef = o.coords === 'ef';
+    const wl = infall(3.2);
+    Tmax = Math.ceil(wl[wl.length - 1][1]) + 1.5;
+    // Observer worldline in the chosen coordinates
+    obs = ef ? wl.map(([r, t, tau]) => [r, t, tau]) : wl.filter(([r]) => r > 1.0005).map(([r, t, tau]) => [r, t - Math.log(r - 1), tau]).filter(p => p[1] <= Tmax + 2);
+    const clipMat = (m) => { m.clippingPlanes = [clip]; return m; };
+    // Horizon worldtube and singularity
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, Tmax, 64, 1, true), clipMat(new THREE.MeshBasicMaterial({ color: 0xffb366, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false })));
+    tube.position.y = Tmax / 2; world.add(tube);
+    for (let y = 0; y <= Tmax; y += 1) { const c = circle(1, 0xffb366, { opacity: 0.35, y }); c.material.clippingPlanes = [clip]; world.add(c); }
+    const sing = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, Tmax, 0)]), clipMat(new THREE.LineDashedMaterial({ color: 0xff5a3c, dashSize: 0.2, gapSize: 0.12 })));
+    sing.computeLineDistances(); world.add(sing);
+    world.add(polarGrid(6.5, 6, 16, 0.14));
+    // Light cones
+    const radii = [0.35, 0.65, 1, 1.5, 2.2, 3.2, 4.6], H = 0.6;
+    for (const tl of [0.18, 0.58].map(f => f * Tmax)) for (const r of radii) for (let k = 0; k < 8; k++) {
+      const cone = coneAt(r, k / 8 * Math.PI * 2 + 0.2, tl, H, ef);
+      if (cone) { cone.traverse(c => { if (c.material) c.material.clippingPlanes = [clip]; }); world.add(cone); }
+    }
+    // Worldline, its outgoing light signals, and a marker
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(obs.map(([r, t]) => new THREE.Vector3(r, t, 0))), clipMat(new THREE.LineBasicMaterial({ color: 0xffffff })));
+    world.add(line);
+    let nextTau = 0.3;
+    for (const [re, te, tau] of obs) {
+      if (tau < nextTau) continue; nextTau += 0.6;
+      const pts = [];
+      if (ef && Math.abs(re - 1) < 0.01) continue;
+      if (ef && re > 1) for (let r = re; r < 9; r += 0.03) { const t = te + (r - re) + 2 * Math.log((r - 1) / (re - 1)); if (t > Tmax + 2) break; pts.push(new THREE.Vector3(r, t, 0)); }
+      else if (ef) for (let r = re; r > 0.02; r -= 0.01) { const t = te + (r - re) + 2 * Math.log((1 - r) / (1 - re)); pts.push(new THREE.Vector3(r, t, 0)); }
+      else for (let r = re; r < 9; r += 0.03) { const t = te + tortoise(r) - tortoise(re); if (t > Tmax + 2) break; pts.push(new THREE.Vector3(r, t, 0)); }
+      if (pts.length > 1) world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), clipMat(new THREE.LineBasicMaterial({ color: re > 1 ? 0x8cc2ff : 0xff8a5c, transparent: true, opacity: 0.85 }))));
+    }
+    marker = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    world.add(marker);
+    now = new THREE.Mesh(new THREE.CircleGeometry(6.5, 96), new THREE.MeshBasicMaterial({ color: 0x8cc2ff, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }));
+    now.rotation.x = -Math.PI / 2; world.add(now);
+    const lab = (t, p, c) => { const s = label(t, { size: 0.36, color: c }); s.position.set(...p); world.add(s); };
+    lab('event horizon', [1.2, Tmax + 0.4, 0.8], '#ffb366');
+    lab('singularity, r = 0', [-0.2, Tmax + 0.9, -0.4], '#ff7a5c');
+    lab('falling observer', [3.3, 0.5, 0.4], '#ffffff');
+    lab('time ↑', [-5.6, Tmax * 0.55, 0], '#8a90a8');
+    camera.position.set(9, Tmax * 0.75, 11); controls.target.set(0, Tmax * 0.42, 0);
+  }
+  let marker = null, now = null;
+  function coneAt(r, ang, t, H, ef) {
+    const q = 1 / r;
+    let X0, A, B;
+    if (ef) { X0 = -q / (1 + q); A = 1 / (1 + q); B = 1 / Math.sqrt(1 + q); }
+    else { if (q >= 0.999) return null; X0 = 0; A = 1 - q; B = Math.sqrt(1 - q); }
+    const er = [Math.cos(ang), Math.sin(ang)], ep = [-Math.sin(ang), Math.cos(ang)];
+    const ax = r * er[0], az = r * er[1], N = 36, pos = [ax, t, az], rim = [];
+    for (let i = 0; i <= N; i++) {
+      const s = i / N * Math.PI * 2, X = H * (X0 + A * Math.cos(s)), Y = H * B * Math.sin(s);
+      pos.push(ax + X * er[0] + Y * ep[0], t + H, az + X * er[1] + Y * ep[1]);
+      rim.push(new THREE.Vector3(pos[pos.length - 3], pos[pos.length - 2], pos[pos.length - 1]));
+    }
+    const idx = []; for (let i = 1; i <= N; i++) idx.push(0, i, i + 1);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+    const color = r > 1.001 ? 0x8cc2ff : r > 0.999 ? 0xe9e5d9 : 0xffb366;
+    const grp = new THREE.Group();
+    grp.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })));
+    grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rim), new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8 })));
+    return grp;
+  }
+  build();
+  return {
+    scene, camera, controls,
+    update(dt) {
+      if (o.animate) { T += dt * o.speed * 1.2; if (T > Tmax + 3) T = 0; } else T = Tmax + 1;
+      clip.constant = T;
+      now.position.y = Math.min(T, Tmax); now.visible = o.animate && T <= Tmax;
+      // Observer position at the current time slice
+      let i = obs.findIndex(p => p[1] > T); if (i < 0) i = obs.length - 1;
+      const p = obs[Math.max(0, i)]; marker.position.set(p[0], Math.min(p[1], T), 0); marker.visible = obs.length > 0 && obs[0][1] <= T;
+      const r = p[0];
+      const where = o.coords !== 'ef' && i === obs.length - 1 ? 'never shown crossing the horizon in these coordinates'
+        : r > 1 ? `outside the horizon, ${r.toFixed(2)} r_s` : r > 0.03 ? `inside the horizon, ${r.toFixed(2)} r_s` : 'reached the singularity';
+      readout(`time ${Math.min(T, Tmax).toFixed(1)}   ·   falling observer: ${where}`);
+    },
+    ui: () => [
+      seg({ label: 'Coordinates', options: [['ef', 'Smooth (Eddington–Finkelstein)'], ['schw', 'Schwarzschild']], value: o.coords, onchange: v => { o.coords = v; build(); } }),
+      check({ id: 'anim', label: 'Let time run upward', checked: o.animate, onchange: v => { o.animate = v; } }),
+      slider({ id: 'tspeed', label: 'Time speed', min: 0.2, max: 3, step: 0.1, value: o.speed, fmt: v => `${(+v).toFixed(1)}×`, oninput: v => { o.speed = v; } }),
+      h('p', { class: 'small' }, 'Up is time; the flat plane is space with one dimension left out. Each cone holds every direction a flash of light can go from that point. Blue lines are flashes the falling observer sends outward, orange ones are flashes sent from inside the horizon.'),
+      h('p', { class: 'small' }, 'In Schwarzschild coordinates the cones pinch shut at the horizon and the observer seems to freeze there. That is a flaw of the coordinates, not of spacetime: switch back and the same fall is smooth.'),
+    ],
+    hint: 'Drag to orbit · scroll to zoom',
+  };
+}
+
+// ======================================================================
+// 5. Tidal stretching: a cloud of free particles falling in
+// ======================================================================
+function makeTides() {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.005, 500);
+  const controls = makeControls(camera); controls.minDistance = 0.05; controls.maxDistance = 80;
+  scene.add(blackHole(1));
+  scene.add(polarGrid(14, 7, 16, 0.1));
+  const o = { size: 0.5, r0: 7, speed: 1, follow: true };
+  const N = 2200;
+  const pos = new Float64Array(N * 3), vel = new Float64Array(N * 3), h2 = new Float64Array(N), stopped = new Uint8Array(N);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 2.4, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.95 }));
+  pts.frustumCulled = false; scene.add(pts);
+  let tau = 0, done = false, center = new THREE.Vector3(), s0 = 1;
+  function drop() {
+    const R = o.size, col = geo.attributes.color.array, cool = [0.55, 0.76, 1], warm = [1, 0.7, 0.4];
+    for (let i = 0; i < N; i++) {
+      let x, y, z; do { x = Math.random() * 2 - 1; y = Math.random() * 2 - 1; z = Math.random() * 2 - 1; } while (x * x + y * y + z * z > 1);
+      pos[i * 3] = o.r0 + x * R; pos[i * 3 + 1] = y * R; pos[i * 3 + 2] = z * R;
+      vel[i * 3] = vel[i * 3 + 1] = vel[i * 3 + 2] = 0; h2[i] = 0; stopped[i] = 0;
+      const k = (x + 1) / 2; for (let c = 0; c < 3; c++) col[i * 3 + c] = lerp(warm[c], cool[c], k);
+    }
+    geo.attributes.color.needsUpdate = true;
+    s0 = R / Math.sqrt(5); tau = 0; done = false;
+    center.set(o.r0, 0, 0);
+    camera.position.set(o.r0 + R * 1.2, R * 2.2, R * 6.5); controls.target.copy(center);
+    sync();
+  }
+  function sync() { const a = geo.attributes.position.array; for (let i = 0; i < N * 3; i++) a[i] = pos[i]; geo.attributes.position.needsUpdate = true; }
+  // Same exact equation as the orbit playground; radial infall from rest has almost no angular momentum
+  function step(dt) {
+    for (let i = 0; i < N; i++) {
+      if (stopped[i]) continue;
+      const j = i * 3;
+      const f = (x, y, z) => { const r2 = x * x + y * y + z * z, r = Math.sqrt(r2); return -(M / (r2 * r) + 3 * M * h2[i] / (r2 * r2 * r)); };
+      let x = pos[j], y = pos[j + 1], z = pos[j + 2], u = vel[j], v = vel[j + 1], w = vel[j + 2];
+      const k1 = f(x, y, z);
+      const xm = x + u * dt / 2, ym = y + v * dt / 2, zm = z + w * dt / 2;
+      const um = u + k1 * x * dt / 2, vm = v + k1 * y * dt / 2, wm = w + k1 * z * dt / 2;
+      const k2 = f(xm, ym, zm);
+      pos[j] = x + um * dt; pos[j + 1] = y + vm * dt; pos[j + 2] = z + wm * dt;
+      vel[j] = u + k2 * xm * dt; vel[j + 1] = v + k2 * ym * dt; vel[j + 2] = w + k2 * zm * dt;
+      if (Math.hypot(pos[j], pos[j + 1], pos[j + 2]) < 0.03) stopped[i] = 1;
+    }
+  }
+  drop();
+  const prevCenter = new THREE.Vector3();
+  let info = '';
+  return {
+    scene, camera, controls,
+    update(dt) {
+      if (!done) {
+        let span = dt * o.speed * Math.min(1.2, Math.sqrt(center.length()) * 0.6);
+        while (span > 0) { const r = Math.max(center.length(), 0.04), d = Math.min(span, 0.004 * r ** 1.5); step(d); span -= d; tau += d; center.set(0, 0, 0); for (let i = 0; i < N; i++) center.x += pos[i * 3] / N, center.y += pos[i * 3 + 1] / N, center.z += pos[i * 3 + 2] / N; if (center.length() < 0.06) { done = true; break; } }
+        sync();
+      }
+      if (o.follow) { const d = center.clone().sub(prevCenter.lengthSq() ? prevCenter : center); camera.position.add(d); controls.target.add(d); }
+      prevCenter.copy(center);
+      // Measure stretch along the fall and squeeze across it
+      const u = center.clone().normalize(); let along = 0, across = 0;
+      for (let i = 0; i < N; i += 4) {
+        const dx = pos[i * 3] - center.x, dy = pos[i * 3 + 1] - center.y, dz = pos[i * 3 + 2] - center.z;
+        const a = dx * u.x + dy * u.y + dz * u.z; along += a * a; across += (dx * dx + dy * dy + dz * dz - a * a) / 2;
+      }
+      along = Math.sqrt(along / (N / 4)) / s0; across = Math.sqrt(across / (N / 4)) / s0;
+      const r = center.length(), r0 = o.r0;
+      const eta = Math.acos(clamp(2 * r / r0 - 1, -1, 1)), left = Math.sqrt(r0 ** 3 / (8 * M)) * (Math.PI - eta - Math.sin(eta));
+      info = done ? 'the cloud has reached the singularity: inside the horizon every path ends there'
+        : `${r.toFixed(2)} r_s from the center${r < 1 ? ' (inside the horizon)' : ''}   ·   stretched ${along.toFixed(2)}× along the fall, ${across.toFixed(2)}× across\nproper time left: ${left.toFixed(2)} r_s/c`;
+      readout(info);
+    },
+    ui: () => {
+      const sizes = [['Star near a small black hole', 0.5], ['Ship near a giant black hole', 0.02]];
+      return [
+        h('h4', {}, 'Cloud size compared with the black hole'),
+        buttons(sizes.map(([n, s]) => [n, () => { o.size = s; drop(); sl.querySelector('input').value = Math.log10(s); sl.querySelector('output').textContent = `${s} r_s`; }])),
+        (sl = slider({ id: 'csize', label: 'Cloud radius', min: -2, max: -0.1, step: 0.01, value: Math.log10(o.size), fmt: v => `${(10 ** v).toPrecision(2)} r_s`, oninput: v => { o.size = 10 ** v; drop(); } })),
+        slider({ id: 'r0', label: 'Start distance', min: 3, max: 14, step: 0.1, value: o.r0, fmt: v => `${(+v).toFixed(1)} r_s`, oninput: v => { o.r0 = v; drop(); } }),
+        slider({ id: 'tspeed2', label: 'Speed', min: 0.1, max: 3, step: 0.05, value: o.speed, fmt: v => `${(+v).toFixed(2)}×`, oninput: v => { o.speed = v; } }),
+        check({ id: 'follow', label: 'Camera rides along with the cloud', checked: o.follow, onchange: v => { o.follow = v; } }),
+        buttons([['Drop again', drop, true]]),
+        h('p', { class: 'small' }, 'Colors mark where each particle started: orange on the side nearer the black hole, blue on the far side.'),
+      ];
+    },
+    hint: 'Drag to orbit · scroll to zoom',
+  };
+  var sl;
+}
+
+// ======================================================================
+// 6. Gravitational waves from an inspiraling binary (quadrupole approximation)
+// ======================================================================
+function makeWaves() {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 800);
+  camera.position.set(26, 20, 30);
+  const controls = makeControls(camera, [0, 2, 0]); controls.minDistance = 5; controls.maxDistance = 140;
+  const o = { mode: 'chirp', height: 1, rings: true, sheet: true, speed: 1 };
+  const V = 4, OM0 = 1.05, OMMAX = 6, TC = 16, A0 = 3;
+  // Strain sheet in the orbital plane
+  const NR = 130, NA = 180, R0 = 2.4, R1 = 40, nV = NR * NA;
+  const rs = new Float32Array(NR), cs = new Float32Array(NA), sn = new Float32Array(NA);
+  for (let i = 0; i < NR; i++) rs[i] = R0 + (R1 - R0) * i / (NR - 1);
+  for (let j = 0; j < NA; j++) { cs[j] = Math.cos(j / NA * Math.PI * 2); sn[j] = Math.sin(j / NA * Math.PI * 2); }
+  const sp = new Float32Array(nV * 3), sc = new Float32Array(nV * 3), idx = [];
+  for (let i = 0; i < NR - 1; i++) for (let j = 0; j < NA; j++) { const a = i * NA + j, b = i * NA + (j + 1) % NA, c = a + NA, d = b + NA; idx.push(a, c, b, b, c, d); }
+  const sg = new THREE.BufferGeometry();
+  sg.setAttribute('position', new THREE.BufferAttribute(sp, 3)); sg.setAttribute('color', new THREE.BufferAttribute(sc, 3)); sg.setIndex(idx);
+  const sheet = new THREE.Group();
+  sheet.add(new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })));
+  sheet.add(new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0x8a90a8, wireframe: true, transparent: true, opacity: 0.08 })));
+  scene.add(sheet);
+  // Binary
+  const bh1 = blackHole(0.45), bh2 = blackHole(0.45), merged = blackHole(0.75); merged.visible = false;
+  scene.add(bh1, bh2, merged);
+  // Source history for retarded-time lookups
+  let hist = { t: [], A: [], P: [] };
+  let t = 0, phase = 0, om = OM0, stage = 'inspiral', tm = 0, amp = 0;
+  function sample(tr) {
+    const H = hist; if (!H.t.length || tr < H.t[0]) return null;
+    let lo = 0, hi = H.t.length - 1; if (tr >= H.t[hi]) return [H.A[hi], H.P[hi]];
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (H.t[m] < tr) lo = m; else hi = m; }
+    const k = (tr - H.t[lo]) / (H.t[hi] - H.t[lo]);
+    return [lerp(H.A[lo], H.A[hi], k), lerp(H.P[lo], H.P[hi], k)];
+  }
+  function restart() { hist = { t: [], A: [], P: [] }; t = 0; phase = 0; om = OM0; stage = 'inspiral'; }
+  // Rings of free test particles, each in the plane transverse to the wave's direction
+  const ringDefs = [
+    { th: 0, ph: 0, r: 15, name: 'above the orbit' },
+    { th: Math.PI / 4, ph: Math.PI / 2, r: 15, name: '45° up' },
+    { th: Math.PI / 2, ph: 0, r: 15, name: 'in the orbital plane' },
+  ];
+  const ringGroup = new THREE.Group(); scene.add(ringGroup);
+  const NRP = 40, RR = 2.4;
+  for (const d of ringDefs) {
+    const st = Math.sin(d.th), ct = Math.cos(d.th), sf = Math.sin(d.ph), cf = Math.cos(d.ph);
+    d.c = new THREE.Vector3(d.r * st * cf, d.r * ct, d.r * st * sf);
+    d.e1 = new THREE.Vector3(ct * cf, -st, ct * sf);    // theta-hat
+    d.e2 = new THREE.Vector3(-sf, 0, cf);               // phi-hat
+    const ref = []; for (let k = 0; k <= 64; k++) { const a = k / 64 * Math.PI * 2; ref.push(d.c.clone().addScaledVector(d.e1, RR * Math.cos(a)).addScaledVector(d.e2, RR * Math.sin(a))); }
+    ringGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ref), new THREE.LineBasicMaterial({ color: 0x8a90a8, transparent: true, opacity: 0.35 })));
+    d.geo = new THREE.BufferGeometry(); d.geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((NRP + 1) * 3), 3));
+    ringGroup.add(new THREE.Line(d.geo, new THREE.LineBasicMaterial({ color: 0xffffff })));
+    d.dots = new THREE.Points(d.geo, new THREE.PointsMaterial({ color: 0xffd9a8, size: 5, sizeAttenuation: false }));
+    ringGroup.add(d.dots);
+    const l = label(d.name, { size: 0.7, color: '#8a90a8' }); l.position.copy(d.c).add(new THREE.Vector3(0, RR + 1.1, 0)); ringGroup.add(l);
+  }
+  const warm = [1, 0.62, 0.3], cool = [0.45, 0.72, 1], base = [0.07, 0.08, 0.13];
+  return {
+    scene, camera, controls,
+    update(dt) {
+      const d = dt * o.speed;
+      t += d;
+      if (o.mode === 'steady') { om = OM0; amp = 1; stage = 'steady'; }
+      else if (stage === 'inspiral') {
+        om = Math.min(OMMAX, OM0 * Math.pow(Math.max(1 - t / TC, 1e-6), -3 / 8));
+        amp = Math.pow(om / OM0, 2 / 3);
+        if (om >= OMMAX) { stage = 'ringdown'; tm = t; }
+      } else if (stage === 'ringdown') {
+        om = OMMAX * 1.3; amp = Math.pow(OMMAX / OM0, 2 / 3) * Math.exp(-(t - tm) / 0.35);
+        if (t - tm > 2.5) stage = 'quiet';
+      } else if (stage === 'quiet') { amp = 0; if (t - tm > R1 / V + 4) restart(); }
+      phase += om * d;
+      hist.t.push(t); hist.A.push(amp); hist.P.push(phase);
+      if (hist.t.length > 20000) { const cut = 5000; for (const k of ['t', 'A', 'P']) hist[k].splice(0, cut); }
+      // Binary positions
+      const a = stage === 'inspiral' || stage === 'steady' ? A0 * Math.pow(OM0 / om, 2 / 3) : 0;
+      const inspiraling = stage === 'inspiral' || stage === 'steady';
+      bh1.visible = bh2.visible = inspiraling; merged.visible = !inspiraling;
+      bh1.position.set(a / 2 * Math.cos(phase), 0, a / 2 * Math.sin(phase)); bh2.position.copy(bh1.position).multiplyScalar(-1);
+      // Strain sheet: h+ in the plane, 2(phi_orbit - phi) pattern, retarded by r/V
+      sheet.visible = o.sheet;
+      if (o.sheet) {
+        const kH = 11 * o.height;
+        for (let i = 0; i < NR; i++) {
+          const r = rs[i], s = sample(t - r / V);
+          // Taper toward the middle, where the far-field formula stops applying
+          const taper = clamp((r - R0) / 6, 0, 1), Ar = s ? s[0] / Math.max(r, 3) * 0.5 * taper * taper : 0, P2 = s ? 2 * s[1] : 0, c2 = Math.cos(P2), s2 = Math.sin(P2);
+          for (let j = 0; j < NA; j++) {
+            const k = i * NA + j, cphi2 = cs[j] * cs[j] - sn[j] * sn[j], sphi2 = 2 * sn[j] * cs[j];
+            const hp = Ar * (c2 * cphi2 + s2 * sphi2);   // cos(2Φ − 2φ)
+            sp[k * 3] = r * cs[j]; sp[k * 3 + 1] = kH * hp; sp[k * 3 + 2] = r * sn[j];
+            const m = clamp(Math.abs(hp) * 9, 0, 1), tone = hp > 0 ? warm : cool;
+            for (let c = 0; c < 3; c++) sc[k * 3 + c] = lerp(base[c], tone[c], m);
+          }
+        }
+        sg.attributes.position.needsUpdate = true; sg.attributes.color.needsUpdate = true;
+      }
+      ringGroup.visible = o.rings;
+      if (o.rings) for (const R of ringDefs) {
+        const s = sample(t - R.r / V), arr = R.geo.attributes.position.array;
+        const Ar = s ? s[0] / R.r : 0, P2 = s ? 2 * (s[1] - R.ph) : 0, ct = Math.cos(R.th);
+        const hp = Ar * (1 + ct * ct) / 2 * Math.cos(P2), hx = Ar * ct * Math.sin(P2), k = 7 * o.height;
+        for (let n = 0; n <= NRP; n++) {
+          const al = n / NRP * Math.PI * 2, ca = Math.cos(al), sa = Math.sin(al);
+          const d1 = RR * (ca + 0.5 * k * (hp * ca + hx * sa)), d2 = RR * (sa + 0.5 * k * (hx * ca - hp * sa));
+          arr[n * 3] = R.c.x + R.e1.x * d1 + R.e2.x * d2; arr[n * 3 + 1] = R.c.y + R.e1.y * d1 + R.e2.y * d2; arr[n * 3 + 2] = R.c.z + R.e1.z * d1 + R.e2.z * d2;
+        }
+        R.geo.attributes.position.needsUpdate = true;
+      }
+      const stageText = { inspiral: 'spiraling in', ringdown: 'merged, ringing down', quiet: 'quiet: the last waves are still traveling outward', steady: 'steady orbit' }[stage];
+      readout(`${stageText}${inspiraling ? `   ·   orbit period ${(2 * Math.PI / om).toFixed(2)} s, waves at twice that frequency` : ''}`);
+    },
+    ui: () => [
+      seg({ label: 'Source', options: [['chirp', 'Spiral in and merge'], ['steady', 'Steady orbit']], value: o.mode, onchange: v => { o.mode = v; restart(); } }),
+      slider({ id: 'gwh', label: 'Exaggeration', min: 0, max: 2.5, step: 0.05, value: o.height, fmt: v => `${(+v).toFixed(2)}×`, oninput: v => { o.height = v; } }),
+      check({ id: 'gws', label: 'Strain map in the orbital plane', checked: o.sheet, onchange: v => { o.sheet = v; } }),
+      check({ id: 'gwr', label: 'Rings of free-floating particles', checked: o.rings, onchange: v => { o.rings = v; } }),
+      slider({ id: 'gwsp', label: 'Speed', min: 0.2, max: 2, step: 0.05, value: o.speed, fmt: v => `${(+v).toFixed(2)}×`, oninput: v => { o.speed = v; } }),
+      buttons([['Restart', restart, true]]),
+      h('p', { class: 'small' }, 'On the sheet, height and color show the stretch of space at that spot, orange for stretched along the outward direction around the circle and blue for squeezed. It is a map of strain, not a dent in a surface.'),
+    ],
+    hint: 'Drag to orbit · scroll to zoom',
+  };
+}
+
+// ======================================================================
+// Scene catalog and app shell
+// ======================================================================
+const SCENES = [
+  { id: 'lensing', name: 'Black hole lensing', sub: 'How a black hole bends the light behind it', exact: true, make: makeLensing,
+    seeing: 'Every pixel traces one ray of light backward from the camera along its true curved path around a non-spinning black hole. The far side of the glowing disk shows up bent over the top and under the bottom. The thin bright ring hugging the shadow is light that circled the hole before reaching you. The side of the disk moving toward you looks brighter and bluer; the side moving away looks dimmer and redder.',
+    leaves: 'Real black holes spin, which squashes one side of the shadow. The disk is an idealized thin sheet with made-up texture, and its colors are stylized rather than a true spectrum.',
+    tip: 'Switch the background to Grid sky, then turn gravity off and on to see exactly how the sky gets rearranged.' },
+  { id: 'grid', name: 'Warped grid and clocks', sub: 'Measured distance and slowed time', exact: true, make: makeGrid,
+    seeing: 'A cube of grid lines spaced by true, measured distance. Near a compact mass there is more room between two nested spheres than their sizes suggest, so equal measured steps crowd together in this picture. The clocks tick at the rate general relativity predicts, and the line colors show the same slowdown.',
+    leaves: 'Curved 3D space can’t be drawn exactly in flat 3D, so this shows one honest property, distance measured straight outward, and ignores the rest. For everyday gravity, the slowing of time does most of the work of making things fall; the clocks and colors show it, the shape does not.',
+    tip: 'Start at Earth, where nothing visibly moves and a surface clock loses about 0.7 nanoseconds each second, then slide up to a neutron star.' },
+  { id: 'orbits', name: 'Orbit playground', sub: 'Launch matter and light', exact: true, make: makeOrbits,
+    seeing: 'Each path is an exact solution of Einstein’s equations for one non-spinning black hole. Matter orbits don’t close: each pass swings the ellipse around, the same effect measured for Mercury but enormous here. Light bends, can circle the hole at 1.5 r_s, and is captured if aimed too close. The gray paths show what Newton’s gravity would predict from the same start.',
+    leaves: 'The moving objects have no mass of their own, so they don’t pull on the black hole or radiate gravitational waves. Paths are drawn in Schwarzschild coordinates, and the clock behind the motion is each object’s own.',
+    tip: 'Try Zoom-whirl: the orbit loops around the hole several times near its closest approach before swinging back out.' },
+  { id: 'cones', name: 'Light cones', sub: 'Why nothing gets out', exact: true, make: makeCones,
+    seeing: 'Time runs upward. Each cone shows every direction light can go from that point, so anything with mass must stay inside it. Far away the cones stand upright. Closer in they tip toward the black hole, at the horizon one edge stands straight up, and inside every cone points inward. A falling observer crosses the horizon smoothly; after that, even light they send outward heads for the singularity.',
+    leaves: 'One space dimension is left out, so space looks like a flat plane. The vertical axis is a particular choice of time coordinate, picked because it stays smooth across the horizon.',
+    tip: 'Switch to Schwarzschild coordinates to see where the “frozen at the horizon” picture comes from.' },
+  { id: 'tides', name: 'Tidal stretching', sub: 'What curvature does to a falling cloud', exact: true, make: makeTides,
+    seeing: 'A loose cloud of particles falls straight in from rest, each on its own exact path. The near side falls faster than the far side, so the cloud stretches along the fall, and the sides all head for the same center, so it narrows. Nearby free-falling paths pulling apart like this is what physicists mean by curvature.',
+    leaves: 'The particles don’t hold onto each other; a real body resists until its strength gives out. With the camera riding along, the fall of the cloud as a whole is hidden on purpose.',
+    tip: 'Compare the two sizes. Near a giant black hole the tides at the horizon are gentle enough that a ship would cross without noticing.' },
+  { id: 'waves', name: 'Gravitational waves', sub: 'Ripples from merging black holes', exact: false, make: makeWaves,
+    seeing: 'Two black holes orbit, spiral in and merge, and space ripples outward at light speed at twice their orbital frequency. The rings of free-floating particles show what a passing wave does: it stretches space one way while squeezing it the other. Above the orbit the pattern rotates; in the orbital plane it only stretches and squeezes in one direction.',
+    leaves: 'Everything is exaggerated about 10²⁰ times; LIGO’s first detection measured a stretch of about one part in 10²¹. The spiral uses the standard quadrupole approximation, and the merger and ringdown are a sketch rather than a full simulation.',
+    tip: 'Watch the ring above the orbit during the final second: the ripples speed up and grow, the chirp LIGO listens for.' },
+];
+const byId = Object.fromEntries(SCENES.map(s => [s.id, s]));
+let cur = null, active = null, fps = 60;
+
+function buildCatalog() {
+  $('#catalog').replaceChildren(...SCENES.map(s => h('button', { class: 'item', 'data-id': s.id, onclick: () => select(s.id) }, h('b', {}, s.name), h('span', {}, s.sub))));
+}
+function select(id) {
+  if (!renderer) return;
+  if (active) { active.dispose?.(); active.controls?.dispose(); disposeTree(active.scene); }
+  cur = byId[id] || SCENES[0];
+  active = cur.make();
+  for (const b of document.querySelectorAll('.item')) b.setAttribute('aria-current', b.dataset.id === cur.id ? 'true' : 'false');
+  try { history.replaceState(null, '', '#' + cur.id); } catch (e) {}
+  $('#info').replaceChildren(
+    h('span', { class: 'badge ' + (cur.exact ? 'exact' : 'approx') }, cur.exact ? 'Exact general relativity' : 'Standard approximation'),
+    h('h2', {}, cur.name),
+    h('h4', {}, 'What you’re seeing'), h('p', {}, cur.seeing),
+    h('h4', {}, 'What it leaves out'), h('p', { class: 'leaves' }, cur.leaves),
+    h('p', { class: 'tip', html: '<b>Try:</b> ' + cur.tip }));
+  $('#controls').replaceChildren(h('h4', {}, 'Controls'), ...active.ui());
+  $('#hint').textContent = active.hint || '';
+  readoutText = ''; resize();
+}
+function resize() {
+  if (!active) return;
+  const r = stage.getBoundingClientRect();
+  renderer.setPixelRatio(active.pixelRatio ?? DPR);
+  renderer.setSize(Math.max(1, r.width), Math.max(1, r.height), false);
+  active.camera.aspect = r.width / Math.max(1, r.height); active.camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+let last = performance.now();
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (dt > 0) fps = lerp(fps, 1 / dt, 0.05);
+  if (!active) return;
+  active.controls?.update();
+  active.update(dt);
+  renderer.render(active.scene, active.renderCamera || active.camera);
+}
+buildCatalog();
+const boot = () => { const id = location.hash.slice(1); select(byId[id] ? id : 'lensing'); requestAnimationFrame(tick); };
+Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot);
+// Debug hook: step and draw without waiting for animation frames
+window.__st = { get active() { return active; }, select, step(n = 1, dt = 1 / 60) {
+  for (let i = 0; i < n; i++) { active.controls?.update(); active.update(dt); }
+  renderer.render(active.scene, active.renderCamera || active.camera);
+} };
+</script>
+</body>
+</html>
