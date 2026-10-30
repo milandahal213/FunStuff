@@ -1108,12 +1108,129 @@ function makeFall() {
   const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 500);
   const controls = makeControls(camera);
   controls.minDistance = 4; controls.maxDistance = 90;
-  const o = { mode: 'steer', ticks: true, speed: 1, ratio: 0.5, push: 0, k: 0.08, kSaved: 0.08 };
+  const o = { mode: 'sheet', ticks: true, speed: 1, ratio: 0.5, push: 0, k: 0.08, kSaved: 0.08, taper: 0.035, equal: false, auto: true };
   const world = new THREE.Group(); scene.add(world);
   let api = null;
   function build(placeCamera = false) {
     api?.dispose?.(); disposeTree(world); world.clear();
-    api = { steer: buildSteer, elevator: buildElevator, aging: buildAging, pair: buildPair }[o.mode](placeCamera);
+    api = { sheet: buildLampshade, steer: buildSteer, elevator: buildElevator, aging: buildAging, pair: buildPair }[o.mode](placeCamera);
+  }
+
+  // ---- Time lampshade: going around is moving through time; a straight line slides down ----
+  // The sheet is the steering rule turned into geometry: distance on it is travel time at the
+  // local clock rate (like a light ray's quickest route), so it is stretched where clocks run
+  // slow. Rolled up it is a cone wider at the ground. Straight lines on a cone can't stay level.
+  function buildLampshade(placeCamera) {
+    if (placeCamera) { camera.position.set(0, 3.4, 20); controls.target.set(0.8, 2.4, 0); }
+    const R0 = 2.5, HT = 5, Y0 = 3.8, NI = 24, NJ = 120, TARGET_MID = 2.5;
+    let G = null, u = 0, target = 0, p = 0, hold = 0;
+    const ease = x => x * x * (3 - 2 * x);
+    function geom() {
+      const k = o.equal ? 1e-5 : o.taper, t = R0 * k, sa = t / Math.sqrt(1 + t * t), ca = 1 / Math.sqrt(1 + t * t);
+      const rhoOf = y => R0 * (1 - k * y) / sa;
+      const g = { k, sa, ca, Th: 2 * Math.PI * sa, rg: rhoOf(0), rt: rhoOf(HT), r0: rhoOf(Y0), rhoOf, yOf: rho => (1 - rho * sa / R0) / k };
+      g.m = (g.rg + g.rt) / 2; g.psi0 = 0.04 * g.Th;
+      // The apple's path: a straight line on the flat sheet, heading along time (perpendicular to the height lines)
+      const maxTurn = o.equal ? 0.92 * g.Th : Math.min(Math.atan(Math.sqrt(g.rg ** 2 - g.r0 ** 2) / g.r0), 2.2 * g.Th);
+      g.sEnd = g.r0 * Math.tan(Math.min(maxTurn, 1.5));
+      return g;
+    }
+    // Map a point of the sheet (distance from apex rho, angle psi) to the world at roll amount uu
+    function place(rho, psi, uu, out) {
+      const e = ease(uu), W = lerp(G.Th, 2 * Math.PI, e), sb = Math.min(1, G.Th / W), cb = Math.sqrt(Math.max(0, 1 - sb * sb));
+      const phi = (psi - G.Th / 2) / sb;
+      const lx = rho * sb * Math.sin(phi), ly = -(rho - G.m) * cb, lz = rho * sb * Math.cos(phi) - G.m * sb;
+      const th = (1 - e) * Math.PI / 2, c = Math.cos(th), s = Math.sin(th);
+      return out.set(lx, ly * c - lz * s + lerp(TARGET_MID, (G.rg - G.m) * G.ca, e), ly * s + lz * c + lerp(0, G.m * G.sa, e));
+    }
+    const pathAt = sv => [Math.hypot(G.r0, sv), G.psi0 + Math.atan(sv / G.r0)];
+
+    // Sheet surface, colored by height: blue near the ground where clocks run slow, warm up high
+    const nV = (NI + 1) * (NJ + 1), sheetGeo = new THREE.BufferGeometry(), idx = [];
+    sheetGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nV * 3), 3));
+    const cols = new Float32Array(nV * 3);
+    for (let i = 0; i <= NI; i++) for (let j = 0; j <= NJ; j++) {
+      const t = i / NI, k3 = (i * (NJ + 1) + j) * 3;
+      cols[k3] = lerp(0.2, 0.75, t); cols[k3 + 1] = lerp(0.36, 0.45, t); cols[k3 + 2] = lerp(0.75, 0.22, t);
+    }
+    sheetGeo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    for (let i = 0; i < NI; i++) for (let j = 0; j < NJ; j++) { const a = i * (NJ + 1) + j, b = a + NJ + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+    sheetGeo.setIndex(idx);
+    const sheet = new THREE.Mesh(sheetGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+    const gridGeo = new THREE.BufferGeometry(), groundGeo = new THREE.BufferGeometry();
+    const grid = new THREE.LineSegments(gridGeo, new THREE.LineBasicMaterial({ color: 0xc9cdda, transparent: true, opacity: 0.3 }));
+    const ground = new THREE.Line(groundGeo, new THREE.LineBasicMaterial({ color: 0x5fbf7a }));
+    const pathGeo = new THREE.BufferGeometry(), traveled = new THREE.BufferGeometry();
+    const path = new THREE.Line(pathGeo, new THREE.LineDashedMaterial({ color: 0xff8a7a, dashSize: 0.18, gapSize: 0.12, transparent: true, opacity: 0.7 }));
+    const done = new THREE.Line(traveled, new THREE.LineBasicMaterial({ color: 0xff5a4a }));
+    const apple = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), new THREE.MeshBasicMaterial({ color: 0xd94c3d }));
+    world.add(sheet, grid, ground, path, done, apple);
+    // Height gauge in ordinary space
+    // It slides out beside the flat sheet and tucks in next to the lampshade
+    const gauge = new THREE.Group();
+    gauge.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, HT, 0)]), new THREE.LineBasicMaterial({ color: 0x8a90a8, transparent: true, opacity: 0.6 })));
+    gauge.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.5, 0, 0), new THREE.Vector3(0.5, 0, 0)]), new THREE.LineBasicMaterial({ color: 0x5fbf7a })));
+    const gaugeApple = apple.clone(); gauge.add(gaugeApple); world.add(gauge);
+    const lab = (t, c, s = 0.32) => { const l = label(t, { size: s, color: c }); world.add(l); return l; };
+    const gLab = label('apple’s height', { size: 0.3, color: '#8a90a8' }); gLab.position.set(0, HT + 0.45, 0); gauge.add(gLab);
+    const lGround = lab('Earth’s surface: clocks tick slower', '#5fbf7a'), lTop = lab('higher up: clocks tick faster', '#ffb366');
+    const lTime = lab('moving through time →', '#c9cdda'), lPath = lab('the apple’s path: a straight line', '#ff8a7a', 0.28);
+
+    const V = new THREE.Vector3();
+    function remap() {
+      const pos = sheetGeo.attributes.position.array;
+      for (let i = 0; i <= NI; i++) for (let j = 0; j <= NJ; j++) {
+        place(lerp(G.rg, G.rt, i / NI), j / NJ * G.Th, u, V); pos.set([V.x, V.y, V.z], (i * (NJ + 1) + j) * 3);
+      }
+      sheetGeo.attributes.position.needsUpdate = true;
+      const gl = [];
+      for (let y = 0.5; y <= HT + 1e-9; y += 0.5) { const r = G.rhoOf(y); for (let j = 0; j < 96; j++) gl.push(place(r, j / 96 * G.Th, u, new THREE.Vector3()), place(r, (j + 1) / 96 * G.Th, u, new THREE.Vector3())); }
+      for (let j = 0; j <= 24; j++) { const ps = j / 24 * G.Th; gl.push(place(G.rg, ps, u, new THREE.Vector3()), place(G.rt, ps, u, new THREE.Vector3())); }
+      gridGeo.setFromPoints(gl);
+      groundGeo.setFromPoints(Array.from({ length: 121 }, (_, j) => place(G.rg, j / 120 * G.Th, u, new THREE.Vector3())));
+      pathGeo.setFromPoints(Array.from({ length: 241 }, (_, i) => { const [r, ps] = pathAt(i / 240 * G.sEnd); return place(r, ps, u, new THREE.Vector3()); }));
+      path.computeLineDistances();
+      gauge.position.x = lerp(9.6, 5.2, ease(u));
+      place(G.rg + 0.55, 0.5 * G.Th, u, lGround.position);
+      place(G.rt - 0.45, 0.5 * G.Th, u, lTop.position);
+      place(G.m, 0.88 * G.Th, u, lTime.position); lTime.position.y += 0.35;
+      { const [r, ps] = pathAt(0.08 * G.sEnd); place(r - 0.45, ps, u, lPath.position); }
+    }
+    function rebuild() { G = geom(); p = 0; hold = 0; remap(); }
+    rebuild();
+    let lastU = -1;
+    return {
+      ui: () => [
+        seg({ label: 'Sheet', options: [['flat', 'Flat'], ['rolled', 'Rolled up']], value: target > 0.5 ? 'rolled' : 'flat', onchange: v => { target = v === 'rolled' ? 1 : 0; o.auto = false; const c = document.getElementById('auto'); if (c) c.checked = false; } }),
+        check({ id: 'auto', label: 'Roll and unroll automatically', checked: o.auto, onchange: v => { o.auto = v; } }),
+        check({ id: 'equal2', label: 'Make every clock tick at the same rate', checked: o.equal, onchange: v => { o.equal = v; rebuild(); } }),
+        slider({ id: 'taper', label: 'How much slower clocks tick lower down', min: 0.012, max: 0.07, step: 0.001, value: o.taper, fmt: v => `${(+v * 100).toFixed(1)}% per unit of height`, oninput: v => { o.taper = v; if (!o.equal) rebuild(); } }),
+        slider({ id: 'fspeed', label: 'Animation speed', min: 0.2, max: 2, step: 0.05, value: o.speed, fmt: v => `${(+v).toFixed(2)}×`, oninput: v => { o.speed = v; } }),
+        h('p', { class: 'small' }, 'This sheet is spacetime near the ground. Going around it, from left to right on the flat sheet, is moving through time. Going up is height. Because clocks tick slower near the ground, the sheet is stretched there, so the lines of constant height are curves, not straight lines.'),
+        h('p', { class: 'small' }, 'An apple let go of is pushed by nothing, so its path through spacetime is a perfectly straight line on the sheet. A straight line can’t follow a curved height line: it drifts toward the stretched edge, the ground. Roll the sheet up and the same straight line becomes a path that circles the lampshade (time passing) while sliding down it (falling).'),
+        h('p', { class: 'small' }, 'Tick “Make every clock tick at the same rate”: the sheet becomes a straight strip, the lampshade becomes a plain cylinder, and the straight line stays level forever. No difference in clock rates, no fall.'),
+        h('p', { class: 'small' }, 'Two honest notes: time doesn’t really loop, the wrap-around is only so the path fits on screen; and no flat drawing shows spacetime’s geometry exactly. This sheet is the steering-apple rule drawn as geometry, and it gives the right kind of fall: slow at first, then faster.'),
+      ],
+      update(dt) {
+        // Roll toward the target at a steady pace, then let the apple run
+        const step = dt * o.speed / 2.4;
+        if (Math.abs(target - u) > 1e-4) u = target > u ? Math.min(target, u + step) : Math.max(target, u - step);
+        if (u !== lastU) { remap(); lastU = u; }
+        const rolling = Math.abs(target - u) > 1e-4;
+        if (!rolling) {
+          if (hold > 0) { hold -= dt; if (hold <= 0) { p = 0; if (o.auto) target = 1 - target; } }
+          else { p = Math.min(1, p + dt * o.speed / 7); if (p >= 1) hold = 1.4; }
+        }
+        const sv = p * G.sEnd, [r, ps] = pathAt(sv);
+        place(r, ps, u, apple.position);
+        traveled.setFromPoints(Array.from({ length: 81 }, (_, i) => { const [ri, pi] = pathAt(i / 80 * sv); return place(ri, pi, u, new THREE.Vector3()); }));
+        const y = clamp(G.yOf(r), 0, HT);
+        gaugeApple.position.set(0, y, 0);
+        const fell = Y0 - y;
+        readout(o.equal ? `every clock ticks at the same rate · the straight path stays at height ${y.toFixed(2)}: no fall`
+          : `${u < 0.5 ? 'flat sheet' : 'rolled into a lampshade'} · apple height ${y.toFixed(2)}, dropped ${fell.toFixed(2)}${p > 0.02 && p < 1 ? ', and dropping faster as it goes' : ''}`);
+      },
+    };
   }
 
   // ---- Steering apple: a column of clocks turns toward the slower ones ----
@@ -1518,7 +1635,7 @@ function makeFall() {
     update(dt) { api.update(dt); },
     get hint() { return o.mode === 'aging' ? 'Drag the orange handle to change the path · drag elsewhere to orbit · scroll to zoom' : 'Drag to orbit · scroll to zoom'; },
     ui: () => [
-      seg({ label: 'Show', options: [['steer', 'Steering apple'], ['elevator', "Apple's view"], ['aging', 'Thrown ball'], ['pair', 'Two masses']], value: o.mode, onchange: v => { o.mode = v; build(true); refreshControls(); } }),
+      seg({ label: 'Show', options: [['sheet', 'Time lampshade'], ['steer', 'Steering apple'], ['elevator', "Apple's view"], ['aging', 'Thrown ball'], ['pair', 'Two masses']], value: o.mode, onchange: v => { o.mode = v; build(true); refreshControls(); } }),
       ...api.ui(),
     ],
     dispose() { api?.dispose?.(); },
@@ -1534,9 +1651,9 @@ const SCENES = [
     leaves: 'Real black holes spin, which squashes one side of the shadow. The disk is an idealized thin sheet with made-up texture, and its colors are stylized rather than a true spectrum.',
     tip: 'Switch the background to Grid sky, then turn gravity off and on to see exactly how the sky gets rearranged.' },
   { id: 'fall', name: 'Why things fall', sub: 'Clocks that tick at different rates', exact: false, make: makeFall,
-    seeing: 'Four ways to see why an apple falls. Steering apple: the apple is a stack of clocks moving into the future; its top clocks tick faster than its bottom ones, so it turns toward the slower side, which is the ground. Apple’s view: the same fall from the ground and from the apple, which feels no force at all. Thrown ball: of every path between a throw and a catch, the real one collects the most time on its own clock. Two masses: worldlines that start side by side drift together with nothing pushing them.',
+    seeing: 'Five ways to see why an apple falls. Time lampshade: spacetime near the ground drawn as a sheet where going around is moving through time; it is stretched where clocks run slow, so the apple’s straight path circles into the future while sliding down to the ground. Steering apple: the apple is a stack of clocks moving into the future; its top clocks tick faster than its bottom ones, so it turns toward the slower side, which is the ground. Apple’s view: the same fall from the ground and from the apple, which feels no force at all. Thrown ball: of every path between a throw and a catch, the real one collects the most time on its own clock. Two masses: worldlines that start side by side drift together with nothing pushing them.',
     leaves: 'Clock differences are exaggerated enormously; near Earth, a clock one meter higher gains about one second every 300 million years. This uses general relativity’s weak-gravity limit, which is exactly where Newton’s laws come from, and it leaves out the small bending of space that matters only for fast things like light.',
-    tip: 'In Steering apple, tick “Make every clock tick at the same rate” and watch the apple stop falling.' },
+    tip: 'In Time lampshade, tick “Make every clock tick at the same rate”: the lampshade turns into a cylinder and the apple stops falling.' },
   { id: 'grid', name: 'Warped grid and clocks', sub: 'Measured distance and slowed time', exact: true, make: makeGrid,
     seeing: 'A cube of grid lines spaced by true, measured distance. Near a compact mass there is more room between two nested spheres than their sizes suggest, so equal measured steps crowd together in this picture. The clocks tick at the rate general relativity predicts, and the line colors show the same slowdown.',
     leaves: 'Curved 3D space can’t be drawn exactly in flat 3D, so this shows one honest property, distance measured straight outward, and ignores the rest. For everyday gravity, the slowing of time does most of the work of making things fall; the clocks and colors show it, the shape does not.',
