@@ -94,6 +94,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
 .legend { height: 10px; border-radius: 3px; }
 .legend-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .small { font-size: 12px; color: var(--muted); }
+.facts-table { border-collapse: collapse; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.facts-table th, .facts-table td { text-align: left; padding: 2px 14px 2px 0; }
+.facts-table th { color: var(--muted); font-weight: 500; }
 
 @media (max-width: 1150px) { .app { grid-template-columns: 210px minmax(0, 1fr) 300px; } }
 @media (max-width: 900px) {
@@ -1167,6 +1170,7 @@ function makeFall() {
         h('p', { class: 'small' }, 'The white bar is the apple drawn as a stack of clocks. Even sitting still, it is moving into the future. Its top clocks are higher, so they tick a little faster and pull ahead of the bottom ones, and the bar turns, the way a tank turns toward its slower track or a marching line wheels around its slowest marcher. Turning toward the slower clocks means turning toward the ground: that is falling.'),
         h('p', { class: 'small' }, 'Turn the clock difference off and the apple floats. For slow things like apples and planets, this difference in clock rates is almost the whole of gravity; the bending of space matters only for fast things like light.'),
         h('p', { class: 'small' }, "Across is the time on the apple's own clock, a drawing trick from Lewis Carroll Epstein's book Relativity Visualized. In it everything moves through spacetime at the same speed, which is what makes the tank picture exact."),
+        realNumbers(),
       ],
       update(dt) {
         if (hold > 0) { hold -= dt; if (hold <= 0) reset(); }
@@ -1194,11 +1198,31 @@ function makeFall() {
         const ticks = v => (v * 10).toFixed(1);
         setTag(topTag, `top clock ${ticks(st.top)}`); topTag.position.copy(a).add(new THREE.Vector3(0, 0.35, 0));
         setTag(botTag, `bottom clock ${ticks(st.bot)}`); botTag.position.copy(b).add(new THREE.Vector3(0, -0.35, 0));
-        const lead = (st.top - st.bot) * 10;
+        const lead = (st.top - st.bot) * 10, tiltDeg = -st.th * 180 / Math.PI, down = Math.sin(-st.th);
         readout(o.k === 0 ? 'every clock ticks at the same rate, so the apple goes straight into the future and never falls'
-          : hold > 0 ? 'the apple has reached the ground' : `the top clock is ${lead.toFixed(2)} ticks ahead of the bottom one, so the apple keeps turning toward the ground · height ${st.y.toFixed(2)}`);
+          : hold > 0 ? 'the apple has reached the ground' : `top clock ${lead.toFixed(2)} ticks ahead of the bottom one · path tilted ${tiltDeg.toFixed(1)}° downward\ndownward speed = ${down.toFixed(3)} × its speed through spacetime, and growing as the tilt grows · height ${st.y.toFixed(2)}`);
       },
     };
+    // Why a tiny clock difference gives a fast fall: the apple covers c × 1 s of time every second
+    function realNumbers() {
+      const PLACES = [['Moon', 1.62], ['Mars', 3.71], ['Earth', 9.81], ['Jupiter', 24.8], ['Sun’s surface', 274]];
+      const C = 299792458, box = h('div', { class: 'ctl' });
+      const sci = (v, d = 2) => { const e = Math.floor(Math.log10(v)); return `${(v / 10 ** e).toFixed(d)} × 10${sup(e)}`; };
+      const show = gv => {
+        const grad = gv / (C * C), tilt = gv / C;
+        const rows = [1, 2, 3].map(t => h('tr', {}, h('td', {}, `${t} s`), h('td', {}, `${(gv * t).toFixed(1)} m/s`), h('td', {}, `${(gv * t * t / 2).toFixed(1)} m`)));
+        box.replaceChildren(
+          h('p', { class: 'small' }, `1. A clock 1 m higher ticks faster by ${sci(grad)} of a second, every second.`),
+          h('p', { class: 'small' }, `2. Even at rest, the apple moves through time at the speed of light: about 299,792 km of time every second.`),
+          h('p', { class: 'small' }, `3. Its path turns by that tiny fraction for every meter of the trip, so after 1 s it has tilted by ${sci(tilt)} radians.`),
+          h('p', { class: 'small' }, `4. Tilting something that moves at light speed by that angle gives a downward speed of c × tilt = ${gv.toFixed(2)} m/s. The top clocks keep pulling ahead, so the tilt keeps growing and the apple gains another ${gv.toFixed(2)} m/s every second.`),
+          h('table', { class: 'facts-table' }, h('tr', {}, h('th', {}, 'after'), h('th', {}, 'falling at'), h('th', {}, 'fallen')), rows),
+          h('p', { class: 'small' }, `In one line: g = c² × how much faster clocks tick per meter = (3.00 × 10⁸)² × ${sci(grad)} ≈ ${gv.toFixed(2)} m/s².`));
+      };
+      const pick = seg({ label: 'Real numbers for', options: PLACES.map(([n, v]) => [v, n]), value: 9.81, onchange: v => show(+v) });
+      show(9.81);
+      return h('div', { class: 'ctl', style: 'gap:8px;border-top:1px solid var(--line);padding-top:12px' }, h('h4', {}, 'Why the fall is so fast'), pick, box);
+    }
     function frontEnds() {
       const nx = -Math.sin(st.th) * L / 2, ny = Math.cos(st.th) * L / 2;
       return [new THREE.Vector3(st.x + nx, st.y + ny, 0.01), new THREE.Vector3(st.x - nx, st.y - ny, 0.01)];
