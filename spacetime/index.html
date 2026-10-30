@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Beyond the Rubber Sheet</title>
-<meta name="description" content="Six interactive 3D views of curved spacetime computed from general relativity: black hole lensing, warped space and slowed clocks, orbits, light cones, tidal stretching and gravitational waves.">
+<meta name="description" content="Seven interactive 3D views of curved spacetime computed from general relativity: why things fall, black hole lensing, warped space and slowed clocks, orbits, light cones, tidal stretching and gravitational waves.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;1,6..72,500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
@@ -112,7 +112,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
   <header>
     <a class="back" href="../">← FunStuff</a>
     <h1>Beyond the <em>Rubber Sheet</em></h1>
-    <p>Six 3D views of curved spacetime, each computed from general relativity.</p>
+    <p>Seven 3D views of curved spacetime, each computed from general relativity.</p>
   </header>
   <nav class="catalog" id="catalog" aria-label="Scenes"></nav>
   <main class="stage" id="stage">
@@ -1096,6 +1096,238 @@ function makeWaves() {
 }
 
 // ======================================================================
+// 7. Why things fall: maximal aging for a thrown ball, and two converging worldlines
+// ======================================================================
+function makeFall() {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.05, 500);
+  const controls = makeControls(camera);
+  controls.minDistance = 4; controls.maxDistance = 90;
+  const o = { mode: 'aging', ticks: true, speed: 1, ratio: 0.5, push: 0 };
+  const world = new THREE.Group(); scene.add(world);
+  let api = null;
+  function build(placeCamera = false) {
+    api?.dispose?.(); disposeTree(world); world.clear();
+    api = o.mode === 'aging' ? buildAging(placeCamera) : buildPair(placeCamera);
+  }
+
+  // ---- Thrown ball: every path from launch to catch, scored by its own clock ----
+  function buildAging(placeCamera) {
+    // Exaggerated units: g = 2, c² = 13.3, flight time T = 2. Weak-field clock rate: dτ = (1 + g h/c² − v²/2c²) dt
+    const g = 2, C2 = 13.3, T = 2, X = 5, Y = 3, x0 = -5, DT = 0.05, HMAX = 1.8, HSTAR = g * T * T / 8;
+    const tx = t => x0 + t * X, hy = h => h * Y;
+    if (placeCamera) { camera.position.set(-0.4, 3.4, 20); controls.target.set(-0.4, 2.4, 0); }
+    // The ground over time, and lines of constant height whose ticks mark equal proper time
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(X * T + 1.2, 0.8, 2.4), new THREE.MeshBasicMaterial({ color: 0x1b2c26 }));
+    slab.position.set(tx(T / 2), -0.42, 0); world.add(slab);
+    const tmp = [0, 0, 0];
+    for (let k = 0; k <= 6; k++) {
+      const hh = k * 0.3, y = hy(hh), rate = 1 + g * hh / C2;
+      world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(tx(0), y, 0), new THREE.Vector3(tx(T), y, 0)]), new THREE.LineBasicMaterial({ color: 0x8a90a8, transparent: true, opacity: 0.18 })));
+      const tk = [];
+      for (let tau = 0; tau / rate <= T + 1e-9; tau += DT) { const x = tx(tau / rate); tk.push(new THREE.Vector3(x, y - 0.07, 0), new THREE.Vector3(x, y + 0.07, 0)); }
+      rateColor(1 - (rate - 1) * 4, tmp);
+      world.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(tk), new THREE.LineBasicMaterial({ color: new THREE.Color(...tmp), transparent: true, opacity: 0.55 })));
+    }
+    const lab = (t, p, c, s = 0.34) => { const l = label(t, { size: s, color: c }); l.position.set(...p); world.add(l); };
+    lab('higher: clocks tick faster', [tx(T) + 1.9, hy(1.8), 0], '#ffb366', 0.3);
+    lab('ground: clocks tick slower', [tx(T) + 1.9, hy(0) + 0.15, 0], '#8cc2ff', 0.3);
+    lab('time →', [tx(T / 2), -1.15, 0], '#8a90a8');
+    lab('launch', [tx(0), -1.15, 0], '#8a90a8', 0.3);
+    lab('catch', [tx(T), -1.15, 0], '#8a90a8', 0.3);
+    // Side view in ordinary space
+    const sx = x0 - 2;
+    world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(sx, 0, 0), new THREE.Vector3(sx, hy(HMAX), 0)]), new THREE.LineBasicMaterial({ color: 0x8a90a8, transparent: true, opacity: 0.5 })));
+    lab('in space', [sx, hy(HMAX) + 0.45, 0], '#8a90a8', 0.32);
+    lab('height ↑', [sx - 0.95, hy(HMAX / 2), 0], '#8a90a8', 0.3);
+
+    function bezier(Ct, Ch, N = 500) {
+      const ts = new Float64Array(N + 1), hs = new Float64Array(N + 1);
+      for (let i = 0; i <= N; i++) { const s = i / N; ts[i] = 2 * s * (1 - s) * Ct + s * s * T; hs[i] = 2 * s * (1 - s) * Ch; }
+      return { ts, hs };
+    }
+    function clock(p) {
+      let tau = 0, next = DT, vmax = 0, peak = 0; const ticks = [];
+      for (let i = 1; i < p.ts.length; i++) {
+        const dt = p.ts[i] - p.ts[i - 1]; if (dt <= 0) continue;
+        const v = (p.hs[i] - p.hs[i - 1]) / dt, hm = (p.hs[i] + p.hs[i - 1]) / 2;
+        vmax = Math.max(vmax, Math.abs(v)); peak = Math.max(peak, p.hs[i]);
+        const d = (1 + g * hm / C2 - v * v / (2 * C2)) * dt;
+        while (d > 0 && tau + d >= next) {
+          const f = (next - tau) / d;
+          ticks.push(new THREE.Vector3(tx(lerp(p.ts[i - 1], p.ts[i], f)), hy(lerp(p.hs[i - 1], p.hs[i], f)), 0));
+          next += DT;
+        }
+        tau += d;
+      }
+      return { extra: tau - T, ticks, fast: vmax >= Math.sqrt(C2), peak };
+    }
+    const heightAt = (p, t) => { let i = 1; while (i < p.ts.length - 1 && p.ts[i] < t) i++; const f = (t - p.ts[i - 1]) / Math.max(p.ts[i] - p.ts[i - 1], 1e-9); return lerp(p.hs[i - 1], p.hs[i], clamp(f, 0, 1)); };
+    function pathObj(color) {
+      const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color }));
+      const dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color, size: 6, sizeAttenuation: false }));
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshBasicMaterial({ color }));
+      const side = ball.clone(); side.material = ball.material;
+      world.add(line, dots, ball, side);
+      return { line, dots, ball, side, set(p) {
+        this.p = p; this.c = clock(p);
+        line.geometry.dispose(); line.geometry = new THREE.BufferGeometry().setFromPoints(Array.from(p.ts, (t, i) => new THREE.Vector3(tx(t), hy(p.hs[i]), 0)));
+        dots.geometry.dispose(); dots.geometry = new THREE.BufferGeometry().setFromPoints(this.c.ticks);
+      } };
+    }
+    const ground = pathObj(0xe7e9f0), real = pathObj(0x8cc2ff), yours = pathObj(0xffb366);
+    ground.set({ ts: Float64Array.from({ length: 501 }, (_, i) => i / 500 * T), hs: new Float64Array(501) });
+    real.set(bezier(T / 2, 2 * HSTAR));
+    ground.side.position.x = sx - 0.35; real.side.position.x = sx; yours.side.position.x = sx + 0.35;
+    const M = { t: T * 0.42, h: 0.55 };
+    const handle = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffb366 }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 32), new THREE.MeshBasicMaterial({ color: 0xffb366, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
+    world.add(handle, ring);
+    function setUser() {
+      M.t = clamp(M.t, T * 0.26, T * 0.74); M.h = clamp(M.h, 0, HMAX);
+      yours.set(bezier(2 * M.t - T / 2, 2 * M.h));
+      yours.line.material.color.set(yours.c.fast ? 0xff5a3c : 0xffb366);
+      handle.position.set(tx(M.t), hy(M.h), 0); ring.position.copy(handle.position);
+      drawChart();
+    }
+    const nowLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, hy(HMAX), 0)]), new THREE.LineBasicMaterial({ color: 0x8a90a8, transparent: true, opacity: 0.35 }));
+    world.add(nowLine);
+    // Drag the handle; anything else orbits the camera
+    const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const ndc = e => { const r = canvas.getBoundingClientRect(); return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); };
+    let dragging = false;
+    const down = e => { ray.setFromCamera(ndc(e), camera); if (ray.intersectObjects([handle, ring]).length) { dragging = true; controls.enabled = false; canvas.setPointerCapture(e.pointerId); e.stopPropagation(); } };
+    const move = e => {
+      ray.setFromCamera(ndc(e), camera);
+      if (!dragging) { canvas.style.cursor = ray.intersectObjects([handle, ring]).length ? 'grab' : ''; return; }
+      const p = new THREE.Vector3(); if (!ray.ray.intersectPlane(plane, p)) return;
+      M.t = (p.x - x0) / X; M.h = p.y / Y; setUser();
+    };
+    const up = () => { if (dragging) { dragging = false; controls.enabled = true; } };
+    canvas.addEventListener('pointerdown', down, true); canvas.addEventListener('pointermove', move); canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+
+    let chart = null;
+    function drawChart() {
+      if (!chart) return;
+      const c = chart, ctx = c.getContext('2d'), W = c.width, H = c.height, k = W / 300;
+      const ex = hh => ((2 * g * T / 3) * hh - (8 / (3 * T)) * hh * hh) / C2;
+      const y0 = -0.04, y1 = 0.115, px = hh => (24 + hh / HMAX * 266) * k, py = v => H - (16 + (v - y0) / (y1 - y0) * (H / k - 30)) * k;
+      ctx.clearRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(138,144,168,0.35)'; ctx.lineWidth = k;
+      ctx.beginPath(); ctx.moveTo(px(0), py(0)); ctx.lineTo(px(HMAX), py(0)); ctx.stroke();
+      ctx.fillStyle = '#8a90a8'; ctx.font = `${8.5 * k}px "IBM Plex Mono", monospace`;
+      ctx.fillText('0', 4 * k, py(0) + 4 * k); ctx.fillText('peak height →', px(HMAX) - 72 * k, H - 4 * k);
+      ctx.strokeStyle = '#8cc2ff'; ctx.lineWidth = 1.5 * k; ctx.beginPath();
+      for (let i = 0; i <= 100; i++) { const hh = i / 100 * HMAX; i ? ctx.lineTo(px(hh), py(ex(hh))) : ctx.moveTo(px(hh), py(ex(hh))); }
+      ctx.stroke();
+      const dot = (x, y, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 4.5 * k, 0, Math.PI * 2); ctx.fill(); };
+      dot(px(HSTAR), py(ex(HSTAR)), '#8cc2ff');
+      dot(px(yours.c.peak), py(clamp(yours.c.extra, y0, y1)), yours.c.fast ? '#ff5a3c' : '#ffb366');
+    }
+    setUser();
+    let s = 0;
+    return {
+      ui: () => {
+        chart = h('canvas', { width: 600, height: 280, style: 'width:100%;height:auto;background:var(--ink);border-radius:6px', 'aria-label': 'Extra clock time against peak height' });
+        queueMicrotask(drawChart);
+        return [
+          h('h4', {}, 'Extra time on the clock vs. peak height'), chart,
+          h('p', { class: 'small' }, 'Blue curve: every symmetric throw. Its peak is the real throw. The orange dot is your path. No path between the same launch and catch beats the blue dot.'),
+          buttons([['Snap to the real throw', () => { M.t = T / 2; M.h = HSTAR; setUser(); }], ['Barely leave the ground', () => { M.t = T / 2; M.h = 0.05; setUser(); }]]),
+          check({ id: 'ticks', label: 'Show clock ticks along each path', checked: o.ticks, onchange: v => { o.ticks = v; } }),
+          slider({ id: 'fspeed', label: 'Animation speed', min: 0.2, max: 2, step: 0.05, value: o.speed, fmt: v => `${(+v).toFixed(2)}×`, oninput: v => { o.speed = v; } }),
+          h('p', { class: 'small' }, 'For a real ball thrown 4.9 m high and caught 2 seconds later, its clock gains about 3.6 × 10⁻¹⁶ s over a clock left on the ground. This diagram exaggerates the effect about 10¹⁵ times so you can see the ticks.'),
+        ];
+      },
+      update(dt) {
+        s += dt * o.speed / 3; if (s > 1.35) s = 0;
+        const t = clamp(s, 0, 1) * T;
+        nowLine.position.x = tx(t);
+        for (const p of [ground, real, yours]) {
+          const hh = heightAt(p.p, t);
+          p.ball.position.set(tx(t), hy(hh), 0); p.side.position.y = hy(hh);
+          p.dots.visible = o.ticks;
+        }
+        const n = p => p.c.ticks.length;
+        readout(`clock ticks from launch to catch: stay on the ground ${n(ground)} · real throw ${n(real)} · your path ${n(yours)}${yours.c.fast ? ' (faster than light: not possible)' : ''}\n` +
+          `extra time compared with the ground: real throw +${real.c.extra.toFixed(3)} · your path ${yours.c.extra >= 0 ? '+' : ''}${yours.c.extra.toFixed(3)}`);
+      },
+      dispose() { canvas.removeEventListener('pointerdown', down, true); canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up); canvas.style.cursor = ''; controls.enabled = true; },
+    };
+  }
+
+  // ---- Two masses: worldlines that start parallel and drift together ----
+  function buildPair(placeCamera) {
+    if (placeCamera) { camera.position.set(14, 9, 16); controls.target.set(0, 6.5, 0); }
+    const Gc = 4, K = 0.25, TMAX = 60, D0 = 6;
+    const m1 = 1, m2 = o.ratio, rad = m => 0.5 * Math.cbrt(m);
+    const clip = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+    // Newtonian two-body motion in the centre-of-mass frame
+    const mt = m1 + m2, vrel = o.push * Math.sqrt(Gc * mt / D0);
+    let p1 = [-D0 * m2 / mt, 0], p2 = [D0 * m1 / mt, 0], v1 = [0, -vrel * m2 / mt], v2 = [0, vrel * m1 / mt];
+    const w1 = [], w2 = [], dt = 0.002; let merged = -1;
+    for (let t = 0, k = 0; t <= TMAX; t += dt, k++) {
+      if (k % 25 === 0) { w1.push(new THREE.Vector3(p1[0], t * K, p1[1])); w2.push(new THREE.Vector3(p2[0], t * K, p2[1])); }
+      if (merged >= 0) continue;
+      const dx = p2[0] - p1[0], dz = p2[1] - p1[1], r = Math.hypot(dx, dz);
+      if (r < rad(m1) + rad(m2)) { merged = t; const cx = (p1[0] * m1 + p2[0] * m2) / mt, cz = (p1[1] * m1 + p2[1] * m2) / mt; p1 = [cx, cz]; p2 = [cx, cz]; continue; }
+      const f = Gc / (r * r * r);
+      v1[0] += f * m2 * dx * dt; v1[1] += f * m2 * dz * dt; v2[0] -= f * m1 * dx * dt; v2[1] -= f * m1 * dz * dt;
+      p1[0] += v1[0] * dt; p1[1] += v1[1] * dt; p2[0] += v2[0] * dt; p2[1] += v2[1] * dt;
+    }
+    const tube = (pts, color) => {
+      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), Math.min(1500, pts.length * 2), 0.07, 8), new THREE.MeshBasicMaterial({ color }));
+      m.material.clippingPlanes = [clip]; world.add(m);
+    };
+    tube(w1, 0x8cc2ff); tube(w2, 0xffb366);
+    for (const [p, c] of [[w1[0], 0x8cc2ff], [w2[0], 0xffb366]]) {
+      const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([p, p.clone().setY(TMAX * K)]), new THREE.LineDashedMaterial({ color: c, dashSize: 0.25, gapSize: 0.2, transparent: true, opacity: 0.45 }));
+      l.computeLineDistances(); l.material.clippingPlanes = [clip]; world.add(l);
+    }
+    world.add(polarGrid(7, 7, 16, 0.14));
+    const b1 = new THREE.Mesh(new THREE.SphereGeometry(rad(m1), 24, 16), new THREE.MeshBasicMaterial({ color: 0x8cc2ff }));
+    const b2 = new THREE.Mesh(new THREE.SphereGeometry(rad(m2), 24, 16), new THREE.MeshBasicMaterial({ color: 0xffb366 }));
+    const now = new THREE.Mesh(new THREE.CircleGeometry(7, 96), new THREE.MeshBasicMaterial({ color: 0x8cc2ff, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false }));
+    now.rotation.x = -Math.PI / 2;
+    world.add(b1, b2, now);
+    const lab = (t, p, c) => { const l = label(t, { size: 0.42, color: c }); l.position.set(...p); world.add(l); };
+    lab('time ↑', [-7.5, TMAX * K * 0.5, 0], '#8a90a8');
+    lab('dashed: the paths with no gravity', [0, -0.6, 6.5], '#8a90a8');
+    let T = 0;
+    return {
+      ui: () => [
+        slider({ id: 'ratio', label: 'Mass of the orange ball', min: 0.1, max: 1, step: 0.05, value: o.ratio, fmt: v => `${(+v).toFixed(2)} × blue`, oninput: v => { o.ratio = v; build(); } }),
+        slider({ id: 'push', label: 'Sideways push', min: 0, max: 1.3, step: 0.01, value: o.push, fmt: v => +v === 0 ? 'none: dropped from rest' : +v === 1 ? 'circular orbit' : `${(+v).toFixed(2)}× circular`, oninput: v => { o.push = v; build(); } }),
+        buttons([['Drop from rest', () => { o.push = 0; build(); refreshControls(); }], ['Orbit', () => { o.push = 1; build(); refreshControls(); }]]),
+        slider({ id: 'fspeed', label: 'Animation speed', min: 0.2, max: 2, step: 0.05, value: o.speed, fmt: v => `${(+v).toFixed(2)}×`, oninput: v => { o.speed = v; } }),
+        h('p', { class: 'small' }, 'Up is time and the flat plane is space. Two balls released at rest start with parallel worldlines, both pointing straight into the future. Nothing pushes them, yet the lines drift together: that drift is spacetime curvature. With a sideways push the worldlines become helices.'),
+        h('p', { class: 'small' }, 'In real proportions these curves are almost perfectly straight. Earth’s orbit around the Sun, drawn the same way, is a helix about 16 light-minutes wide but one light-year tall per turn: roughly 30,000 times taller than wide.'),
+      ],
+      update(dt) {
+        T += dt * o.speed * 4; if (T > TMAX + 6) T = 0;
+        const y = Math.min(T, TMAX) * K; clip.constant = y; now.position.y = y;
+        const i = Math.min(w1.length - 1, Math.floor(Math.min(T, TMAX) / 0.05));
+        b1.position.copy(w1[i]); b2.position.copy(w2[i]);
+        const sep = w1[i].distanceTo(w2[i]);
+        readout(merged >= 0 && T >= merged ? `time ${Math.min(T, TMAX).toFixed(1)} · the two masses have collided` : `time ${Math.min(T, TMAX).toFixed(1)} · separation ${sep.toFixed(2)}`);
+      },
+    };
+  }
+
+  build(true);
+  return {
+    scene, camera, controls,
+    update(dt) { api.update(dt); },
+    get hint() { return o.mode === 'aging' ? 'Drag the orange handle to change the path · drag elsewhere to orbit · scroll to zoom' : 'Drag to orbit · scroll to zoom'; },
+    ui: () => [
+      seg({ label: 'Show', options: [['aging', 'A thrown ball'], ['pair', 'Two masses']], value: o.mode, onchange: v => { o.mode = v; build(true); refreshControls(); } }),
+      ...api.ui(),
+    ],
+    dispose() { api?.dispose?.(); },
+  };
+}
+
+// ======================================================================
 // Scene catalog and app shell
 // ======================================================================
 const SCENES = [
@@ -1103,6 +1335,10 @@ const SCENES = [
     seeing: 'Every pixel traces one ray of light backward from the camera along its true curved path around a non-spinning black hole. The far side of the glowing disk shows up bent over the top and under the bottom. The thin bright ring hugging the shadow is light that circled the hole before reaching you. The side of the disk moving toward you looks brighter and bluer; the side moving away looks dimmer and redder.',
     leaves: 'Real black holes spin, which squashes one side of the shadow. The disk is an idealized thin sheet with made-up texture, and its colors are stylized rather than a true spectrum.',
     tip: 'Switch the background to Grid sky, then turn gravity off and on to see exactly how the sky gets rearranged.' },
+  { id: 'fall', name: 'Why things fall', sub: 'The path where your clock ticks the most', exact: false, make: makeFall,
+    seeing: 'A spacetime diagram of a ball thrown up and caught 2 seconds later, with time running to the right. Tick marks show clocks running faster higher up. Drag the orange handle to try other paths between the same launch and catch: each path collects ticks on its own clock, and the real throw (blue) always collects the most. Going higher gains time from faster clocks; moving faster to get there loses time. The real arc is the exact balance. In Two masses, worldlines that start side by side, both pointing straight into the future, drift together with nothing pushing them.',
+    leaves: 'Clock differences are exaggerated about 10¹⁵ times. This uses general relativity’s weak-gravity approximation, which is exactly where Newton’s laws come from, and the two-masses view uses Newton’s equations for the motion.',
+    tip: 'Drag the handle above the blue path: the faster clocks up high can’t make up for the extra speed you need to get there.' },
   { id: 'grid', name: 'Warped grid and clocks', sub: 'Measured distance and slowed time', exact: true, make: makeGrid,
     seeing: 'A cube of grid lines spaced by true, measured distance. Near a compact mass there is more room between two nested spheres than their sizes suggest, so equal measured steps crowd together in this picture. The clocks tick at the rate general relativity predicts, and the line colors show the same slowdown.',
     leaves: 'Curved 3D space can’t be drawn exactly in flat 3D, so this shows one honest property, distance measured straight outward, and ignores the rest. For everyday gravity, the slowing of time does most of the work of making things fall; the clocks and colors show it, the shape does not.',
@@ -1130,6 +1366,7 @@ let cur = null, active = null, fps = 60;
 function buildCatalog() {
   $('#catalog').replaceChildren(...SCENES.map(s => h('button', { class: 'item', 'data-id': s.id, onclick: () => select(s.id) }, h('b', {}, s.name), h('span', {}, s.sub))));
 }
+function refreshControls() { $('#controls').replaceChildren(h('h4', {}, 'Controls'), ...active.ui()); $('#hint').textContent = active.hint || ''; }
 function select(id) {
   if (!renderer) return;
   if (active) { active.dispose?.(); active.controls?.dispose(); disposeTree(active.scene); }

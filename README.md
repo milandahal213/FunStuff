@@ -5,4 +5,4 @@ Small interactive sites, each in its own folder. Every site is a self-contained 
 | Site | What it is |
 | --- | --- |
 | [Fractal Atlas](fractal-atlas/) ([live](https://milandahal213.github.io/FunStuff/fractal-atlas/)) | Zoom, tune and redraw 21 classic fractals, including a Mandelbrot deep zoom to about 10³⁰× |
-| [Beyond the Rubber Sheet](spacetime/) ([live](https://milandahal213.github.io/FunStuff/spacetime/)) | Six 3D views of curved spacetime computed from general relativity, from black hole lensing to gravitational waves |
+| [Beyond the Rubber Sheet](spacetime/) ([live](https://milandahal213.github.io/FunStuff/spacetime/)) | Seven 3D views of curved spacetime computed from general relativity, from why things fall to gravitational waves |

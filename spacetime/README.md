@@ -1,6 +1,6 @@
 # Beyond the Rubber Sheet
 
-Six interactive 3D views of curved spacetime, each computed from general relativity rather than the usual bowling ball on a rubber sheet. It's one HTML file that loads [Three.js](https://threejs.org/) from a CDN, with no build step.
+Seven interactive 3D views of curved spacetime, each computed from general relativity rather than the usual bowling ball on a rubber sheet. It's one HTML file that loads [Three.js](https://threejs.org/) from a CDN, with no build step.
 
 **Live site:** https://milandahal213.github.io/FunStuff/spacetime/
 
@@ -8,6 +8,7 @@ Six interactive 3D views of curved spacetime, each computed from general relativ
 
 | Scene | What it shows | Physics |
 | --- | --- | --- |
+| Why things fall | A thrown ball's spacetime diagram: drag any path between launch and catch and compare clock ticks; the real arc ticks the most. Plus two masses whose worldlines drift together or twist into helices | Weak-gravity approximation (maximal aging), Newtonian motion for two masses |
 | Black hole lensing | Ray-traced light paths around a black hole with a glowing disk, Doppler beaming and the photon ring | Exact (Schwarzschild null geodesics, traced per pixel on the GPU) |
 | Warped grid and clocks | A 3D lattice spaced by true measured distance, plus clocks that tick at the predicted rate, from Earth up to a black hole | Exact (Schwarzschild spatial metric and time dilation) |
 | Orbit playground | Launch matter and light by dragging; precessing orbits, zoom-whirls, light capture, with Newton's prediction for comparison | Exact (Schwarzschild geodesics) |
