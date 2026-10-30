@@ -1,0 +1,1210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Zoom, tune and redraw 21 classic fractals in your browser, including a Mandelbrot deep zoom to about 10^30x.">
+<title>Fractal Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: an observatory bench — catalog | live canvas | instrument panel; stacks to one column on phones.
+   Deliberately single dark theme: fractal renders read best on a dark stage. */
+:root {
+  --ink: #0c0e15;
+  --stage: #06070b;
+  --panel: #131622;
+  --line: #262b3d;
+  --fg: #e9e5d9;
+  --muted: #8c91a6;
+  --brass: #dcaa4a;
+  --brass-soft: rgba(220, 170, 74, 0.14);
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--ink); color: var(--fg); font-family: var(--body); font-size: 14px; line-height: 1.5; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr) 336px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header h1 { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: -0.01em; margin: 0; }
+header h1 span { color: var(--brass); }
+header p { margin: 0; color: var(--muted); }
+
+/* Catalog */
+.catalog { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 16px; padding-right: 4px; }
+.group { display: flex; flex-direction: column; gap: 2px; }
+.group h3 { font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px 10px; }
+.item {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  background: none; border: 0; border-radius: 6px; padding: 6px 10px; text-align: left; cursor: pointer; color: var(--fg);
+}
+.item:hover { background: var(--panel); }
+.item .d { font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.item[aria-current="true"] { background: var(--brass-soft); color: var(--brass); }
+.item[aria-current="true"] .d { color: var(--brass); }
+
+/* Stage */
+.stage { position: relative; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--stage); }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.stage canvas.pan { cursor: grab; }
+#snap { pointer-events: none; transform-origin: 50% 50%; }
+.locate { display: flex; gap: 6px; }
+.locate input { flex: 1; min-width: 0; }
+.stage canvas.pan:active { cursor: grabbing; }
+.overlay { position: absolute; font-family: var(--mono); font-size: 11.5px; color: var(--fg); background: rgba(6, 7, 11, 0.72); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; pointer-events: none; font-variant-numeric: tabular-nums; }
+#readout { left: 10px; bottom: 10px; max-width: calc(100% - 20px); }
+.stage.has-mini #readout { max-width: calc(100% - 220px); }
+@media (max-width: 900px) { .stage.has-mini #readout { max-width: calc(100% - 160px); } }
+#hint { right: 10px; top: 10px; color: var(--muted); }
+#note { left: 10px; top: 10px; color: var(--brass); }
+.mini { position: absolute; right: 10px; bottom: 10px; width: 188px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--stage); cursor: pointer; padding: 0; }
+.mini canvas { position: static; width: 100%; height: auto; aspect-ratio: 1; }
+.mini span { display: block; font-family: var(--mono); font-size: 11px; padding: 4px 8px; color: var(--muted); text-align: left; border-top: 1px solid var(--line); }
+.mini:hover span { color: var(--brass); }
+.fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+
+/* Panel */
+.panel { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--brass); margin: 0; }
+.card h2 { font-family: var(--display); font-weight: 700; font-size: 24px; line-height: 1.15; margin: -6px 0 0; text-wrap: balance; }
+.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 13px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+.facts dd.m { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.blurb { margin: 0; }
+.tip { margin: 0; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+.tip b { color: var(--fg); font-weight: 600; }
+.card h4 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+
+.ctl { display: flex; flex-direction: column; gap: 3px; }
+.ctl label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.ctl output { font-family: var(--mono); font-size: 12px; color: var(--brass); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--brass); margin: 2px 0; }
+select, textarea, input[type="text"] { width: 100%; background: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+textarea, input[type="text"] { font-family: var(--mono); font-size: 12.5px; }
+textarea { resize: vertical; min-height: 64px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn { background: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12.5px; }
+.btn:hover { border-color: var(--brass); color: var(--brass); }
+.btn.primary { background: var(--brass); border-color: var(--brass); color: #1a1408; font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); color: #1a1408; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.check input { accent-color: var(--brass); }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.sw { border: 1px solid var(--line); border-radius: 6px; padding: 0; cursor: pointer; overflow: hidden; background: var(--ink); text-align: left; }
+.sw i { display: block; height: 16px; }
+.sw span { display: block; font-size: 11px; padding: 2px 6px; color: var(--muted); }
+.sw[aria-pressed="true"] { border-color: var(--brass); }
+.sw[aria-pressed="true"] span { color: var(--brass); }
+.small { font-size: 12px; color: var(--muted); margin: 0; }
+.limits { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
+.limits li::marker { color: var(--brass); }
+.ok { color: #8fd18b; }
+.bad { color: #ee8a72; }
+.linkish { margin-left: auto; background: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; color: var(--muted); cursor: pointer; font-size: 12.5px; }
+.linkish:hover { color: var(--brass); border-color: var(--brass); }
+
+@media (max-width: 1150px) {
+  .app { grid-template-columns: 200px minmax(0, 1fr) 290px; }
+}
+@media (max-width: 900px) {
+  html, body { height: auto; }
+  .app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .catalog { flex-direction: row; overflow-x: auto; overflow-y: visible; gap: 6px; padding-bottom: 4px; }
+  .group { flex-direction: row; gap: 4px; }
+  .group h3 { display: none; }
+  .item { white-space: nowrap; border: 1px solid var(--line); }
+  .item .d { display: none; }
+  .stage { height: 62vh; min-height: 320px; }
+  .mini { width: 128px; }
+  #hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Fractal <span>Atlas</span></h1>
+    <p id="tagline">Zoom, tune and redraw the classic fractals.</p>
+    <button class="linkish" id="perfLink">Performance &amp; limits</button>
+  </header>
+  <nav class="catalog" id="catalog" aria-label="Fractals"></nav>
+  <main class="stage" id="stage">
+    <canvas id="snap" aria-hidden="true"></canvas>
+    <canvas id="gl2" class="pan" aria-label="Fractal render"></canvas>
+    <canvas id="gl" class="pan" aria-label="Fractal render"></canvas>
+    <canvas id="c2" aria-label="Fractal render"></canvas>
+    <div class="overlay" id="note" hidden></div>
+    <div class="overlay" id="hint" hidden>Click to glide in · click again to stop · drag to pan · scroll or pinch to zoom</div>
+    <div class="overlay" id="readout"></div>
+    <button class="mini" id="mini" hidden title="Open this Julia set">
+      <canvas id="miniGl" width="256" height="256"></canvas>
+      <span id="miniLabel">Julia preview</span>
+    </button>
+  </main>
+  <aside class="panel">
+    <section class="card" id="info"></section>
+    <section class="card" id="controls"></section>
+    <section class="card" id="look"></section>
+    <section class="card" id="perf"></section>
+  </aside>
+</div>
+
+<script>
+// ---------- palettes (cosine gradients: a + b·cos(2π(c·t + d))) ----------
+const PALETTES = {
+  Ember:    [[.5,.5,.5],[.5,.5,.5],[1,1,1],[0,.1,.2]],
+  Spectrum: [[.5,.5,.5],[.5,.5,.5],[1,1,1],[0,.33,.67]],
+  Lichen:   [[.5,.5,.5],[.5,.5,.5],[1,1,.5],[.8,.9,.3]],
+  Dusk:     [[.5,.5,.5],[.5,.5,.5],[1,.7,.4],[0,.15,.2]],
+  Orchid:   [[.5,.5,.5],[.5,.5,.5],[2,1,0],[.5,.2,.25]],
+  Clay:     [[.8,.5,.4],[.2,.4,.2],[2,1,1],[0,.25,.25]],
+  Graphite: [[.5,.5,.5],[.5,.5,.5],[1,1,1],[0,0,0]],
+};
+const G = { palette: 'Ember', shift: 0, glideSpeed: 1.3 };
+try { const p = localStorage.getItem('fa-palette'); if (p && PALETTES[p]) G.palette = p; } catch (e) {}
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+function palRGB(t, name = G.palette) {
+  const [a, b, c, d] = PALETTES[name];
+  return [0, 1, 2].map(i => clamp01(a[i] + b[i] * Math.cos(6.283185 * (c[i] * t + d[i]))));
+}
+const css = (rgb, k = 1) => `rgb(${rgb.map(v => Math.round(v * 255 * k)).join(',')})`;
+const BG = [6, 7, 11];
+
+// ---------- catalog ----------
+const FR = [
+  { id: 'mandelbrot', group: 'Escape-time', name: 'Mandelbrot set', kind: 'escape', type: 0, dim: '2',
+    view: { cx: -0.6, cy: 0, w: 2.8 }, iter: 300,
+    places: [['Whole set', -0.6, 0, 2.8], ['Seahorse Valley', -0.7463, 0.1102, 0.005], ['Elephant Valley', 0.2850, 0.0110, 0.012],
+             ['Triple spiral', -0.0880, 0.6540, 0.01], ['Antenna mini-brot', -1.7549, 0, 0.04], ['Dendrite at c = i', 0, 1, 0.06],
+             ['Deep spiral, 10¹⁴×', '-0.743643887037158704752191506114774', '0.131825904205311970493132056385139', 1e-14],
+             ['Deep filaments, 10²⁶×', '-0.7436438870371591749136101569', '0.1318259042053104098662408479', 1e-26]],
+    info: { who: 'Benoit Mandelbrot, 1980', dim: '2 (boundary)', rule: 'z ← z² + c, starting at z = 0',
+      blurb: 'Every point c on the plane gets a yes-or-no test: start at zero, apply z² + c over and over, and see whether the value stays bounded. The bounded points form the dark body. The colors outside show how quickly the rest escape. The boundary never runs out of detail, and it hides small copies of the whole set.',
+      tip: '<b>Try:</b> click any point on the edge of the set and the view glides toward it without stopping. Click again to stop. Hover to preview the Julia set for that point, and click the preview to open it.' } },
+  { id: 'julia', group: 'Escape-time', name: 'Julia set', kind: 'escape', type: 1, dim: 'varies',
+    view: { cx: 0, cy: 0, w: 3.2 }, iter: 300, c: [-0.123, 0.745],
+    cs: [['Douady rabbit', -0.123, 0.745], ['San Marco', -0.75, 0], ['Siegel disk', -0.391, -0.587], ['Dendrite', 0, 1], ['Spiral', 0.285, 0.01], ['Dust', 0.3, 0.5]],
+    info: { who: 'Gaston Julia and Pierre Fatou, 1918', dim: 'depends on c (up to 2)', rule: 'z ← z² + c, with c fixed',
+      blurb: 'The same formula as the Mandelbrot set with the roles swapped: c is held fixed and the starting point z varies across the plane. When c lies inside the Mandelbrot set the Julia set is one connected piece. When c lies outside, it breaks apart into dust.',
+      tip: '<b>Try:</b> drag the c sliders slowly toward the Dust preset and watch the shape pinch apart.' } },
+  { id: 'burning-ship', group: 'Escape-time', name: 'Burning Ship', kind: 'escape', type: 2, dim: '—',
+    view: { cx: -0.45, cy: -0.5, w: 3.4 }, iter: 300,
+    places: [['Whole set', -0.45, -0.5, 3.4], ['The ship', -1.762, -0.028, 0.08], ['Armada', -1.861, -0.002, 0.012]],
+    info: { who: 'Michelitsch and Rössler, 1992', dim: 'not known exactly', rule: 'z ← (|Re z| + i·|Im z|)² + c',
+      blurb: 'Take the absolute value of the real and imaginary parts before squaring. That one change breaks the smooth symmetry of the Mandelbrot set and produces jagged, flame-like structures. A small ship-shaped copy sits out on the left antenna.',
+      tip: '<b>Try:</b> jump to The ship, then raise iterations to 800.' } },
+  { id: 'tricorn', group: 'Escape-time', name: 'Tricorn', kind: 'escape', type: 3, dim: '—',
+    view: { cx: -0.3, cy: 0, w: 3.6 }, iter: 300,
+    info: { who: 'Crowe, Hasson, Rippon and Strain-Clark, 1989', dim: 'not known exactly', rule: 'z ← z̄² + c  (z̄ is the conjugate)',
+      blurb: 'Flip the sign of the imaginary part before squaring. The set gains three-fold symmetry, and its boundary shows wavy, broken curves that never appear in the Mandelbrot set. Milnor called it the tricorn after its three corners.',
+      tip: '<b>Try:</b> zoom into one of the three corners and compare the small copies with mini-brots.' } },
+  { id: 'multibrot', group: 'Escape-time', name: 'Multibrot', kind: 'escape', type: 5, dim: '2',
+    view: { cx: 0, cy: 0, w: 3.2 }, iter: 250, pow: 3,
+    info: { who: 'Generalizes the Mandelbrot set', dim: '2 (boundary, whole-number d)', rule: 'z ← z^d + c',
+      blurb: 'Raise z to a power d instead of 2. The set gains d − 1 fold rotational symmetry. Fractional powers produce a visible seam where the complex angle wraps around, which makes the morph between whole numbers worth watching.',
+      tip: '<b>Try:</b> drag the power slider slowly from 2 to 3.' } },
+  { id: 'newton', group: 'Escape-time', name: 'Newton fractal', kind: 'escape', type: 4, dim: '> 1',
+    view: { cx: 0, cy: 0, w: 3 }, iter: 60,
+    info: { who: 'Question posed by Arthur Cayley, 1879', dim: 'boundary > 1', rule: 'z ← z − (z³ − 1) / 3z²',
+      blurb: "Newton's method for solving z³ = 1, started from every point on the plane. Each pixel is colored by which of the three cube roots it reaches and shaded by how many steps it took. Every point on a boundary touches all three basins at once.",
+      tip: '<b>Try:</b> zoom into any boundary. The three colors keep braiding together at every scale.' } },
+
+  { id: 'fern', group: 'Iterated function systems', name: 'Barnsley fern', kind: 'fern', dim: 'self-affine',
+    info: { who: 'Michael Barnsley, 1988', dim: 'self-affine, no closed form', rule: '4 affine maps, chosen with p = 0.01, 0.85, 0.07, 0.07',
+      blurb: 'Four affine maps, each picked at random with its own probability, are applied to a single point over and over. The trail of points draws a fern. Changing the numbers slightly gives a different species.',
+      tip: '<b>Try:</b> switch the species and compare the leaf shapes.' } },
+  { id: 'chaos', group: 'Iterated function systems', name: 'Chaos game', kind: 'chaos', dim: '1.585',
+    info: { who: 'Michael Barnsley, 1988', dim: 'log 3 / log 2 ≈ 1.585 (triangle)', rule: 'p ← p + r·(v − p), with v a random vertex',
+      blurb: 'Pick a vertex at random and jump part of the way toward it, then repeat. With three vertices and a half-way jump, the points settle onto the Sierpinski triangle. Rules that limit which vertex comes next produce very different patterns.',
+      tip: '<b>Try:</b> four vertices with no rule fills a plain square. Add “not the same vertex twice” and a fractal appears.' } },
+
+  { id: 'koch', group: 'L-systems', name: 'Koch snowflake', kind: 'lsys', dim: '1.262',
+    axiom: 'F--F--F', rules: { F: 'F+F--F+F' }, angle: 60, iter: 4, maxIter: 7, heading: 0,
+    info: { who: 'Helge von Koch, 1904', dim: 'log 4 / log 3 ≈ 1.262', rule: 'F → F+F−−F+F, angle 60°',
+      blurb: 'Replace the middle third of every edge with two sides of a small equilateral triangle. The perimeter grows by a third at each step and becomes infinite, while the enclosed area stays finite at 8/5 of the starting triangle.',
+      tip: '<b>Try:</b> change the angle to 80° or 85° to get the spikier Cesàro variants.' } },
+  { id: 'dragon', group: 'L-systems', name: 'Dragon curve', kind: 'lsys', dim: '2',
+    axiom: 'FX', rules: { X: 'X+YF+', Y: '-FX-Y' }, angle: 90, iter: 12, maxIter: 17, heading: 0,
+    info: { who: 'Heighway, Banks and Harter, 1966', dim: '2 (boundary ≈ 1.524)', rule: 'X → X+YF+,  Y → −FX−Y, angle 90°',
+      blurb: 'Fold a strip of paper in half again and again, then open every fold to a right angle. The resulting curve never crosses itself, and four copies of it tile the plane.',
+      tip: '<b>Try:</b> press Animate drawing to watch the fold sequence unwind.' } },
+  { id: 'hilbert', group: 'L-systems', name: 'Hilbert curve', kind: 'lsys', dim: '2',
+    axiom: 'A', rules: { A: '+Bf-AfA-fB+', B: '-Af+BfB+fA-' }, draw: 'f', angle: 90, iter: 5, maxIter: 8, heading: 0,
+    info: { who: 'David Hilbert, 1891', dim: '2', rule: 'A → +BF−AFA−FB+,  B → −AF+BFB+FA−',
+      blurb: 'A continuous curve that eventually passes through every point of a square. Each step replaces the curve with four smaller, rotated copies joined end to end. Databases and image formats use it to keep nearby points close together in memory.',
+      tip: '<b>Try:</b> step the iterations up one at a time and follow a single corner.' } },
+  { id: 'arrowhead', group: 'L-systems', name: 'Sierpinski arrowhead', kind: 'lsys', dim: '1.585',
+    axiom: 'A', rules: { A: 'B-A-B', B: 'A+B+A' }, angle: 60, iter: 6, maxIter: 10, heading: 0,
+    info: { who: 'Wacław Sierpiński, 1915 (triangle)', dim: 'log 3 / log 2 ≈ 1.585', rule: 'A → B−A−B,  B → A+B+A, angle 60°',
+      blurb: 'A single unbroken path that converges on the Sierpinski triangle. Each segment becomes three segments bent at 60°, alternating from side to side.',
+      tip: '<b>Try:</b> odd and even iteration counts point the arrowhead in different directions.' } },
+  { id: 'gosper', group: 'L-systems', name: 'Gosper curve', kind: 'lsys', dim: '2',
+    axiom: 'A', rules: { A: 'A-B--B+A++AA+B-', B: '+A-BB--B-A++A+B' }, angle: 60, iter: 4, maxIter: 6, heading: 0,
+    info: { who: 'Bill Gosper, 1973', dim: '2 (boundary ≈ 1.129)', rule: 'A → A−B−−B+A++AA+B−,  B → +A−BB−−B−A++A+B',
+      blurb: 'Also called the flowsnake. Seven copies of the curve fit inside a slightly larger, rotated copy. The region it fills, the Gosper island, tiles the plane.',
+      tip: '<b>Try:</b> Animate drawing at 5 iterations.' } },
+  { id: 'levy', group: 'L-systems', name: 'Lévy C curve', kind: 'lsys', dim: '2',
+    axiom: 'F', rules: { F: '+F--F+' }, angle: 45, iter: 12, maxIter: 17, heading: 0,
+    info: { who: 'Ernesto Cesàro, 1906; Paul Lévy, 1938', dim: '2', rule: 'F → +F−−F+, angle 45°',
+      blurb: 'Replace each segment with the two legs of an isosceles right triangle built on it. After many steps the curve looks like an ornate letter C.',
+      tip: '<b>Try:</b> nudge the angle away from 45° to see it twist.' } },
+  { id: 'plant', group: 'L-systems', name: 'Fractal plant', kind: 'lsys', dim: '—',
+    axiom: 'X', rules: { X: 'F+[[X]-X]-F[-FX]+X', F: 'FF' }, angle: 25, iter: 5, maxIter: 7, heading: 75,
+    info: { who: 'Aristid Lindenmayer, 1968', dim: '—', rule: 'X → F+[[X]−X]−F[−FX]+X,  F → FF',
+      blurb: 'Lindenmayer created L-systems to model how algae and plants grow. Square brackets save and restore the drawing position, which is what creates the branches.',
+      tip: '<b>Try:</b> angles between 18° and 30° give the most natural-looking plants.' } },
+  { id: 'lab', group: 'L-systems', name: 'L-system lab', kind: 'lsys', lab: true, dim: 'yours',
+    axiom: 'F-G-G', rules: { F: 'F-G+F+G-F', G: 'GG' }, angle: 120, iter: 6, maxIter: 12, heading: 0,
+    info: { who: 'Your own rules', dim: 'depends on your rules', rule: 'F G A B draw · f moves · + − turn · [ ] branch · | turn around',
+      blurb: 'Write your own rewriting rules. Each iteration replaces every symbol with its rule, and then a turtle follows the final string. The starting rules draw a Sierpinski triangle.',
+      tip: '<b>Try:</b> load any preset below, then change a single symbol in a rule.' } },
+
+  { id: 'tree', group: 'Recursive geometry', name: 'Fractal tree', kind: 'tree', dim: '—',
+    info: { who: 'A classic recursion exercise', dim: 'depends on angle and ratio', rule: 'branch → two branches, each ratio × as long',
+      blurb: 'Each branch ends by splitting into two shorter branches at a fixed angle. Three numbers, the split angle, the length ratio and the lean, control the entire shape.',
+      tip: '<b>Try:</b> turn on Sway, then set the angle near 90° for a T-square pattern.' } },
+  { id: 'pythagoras', group: 'Recursive geometry', name: 'Pythagoras tree', kind: 'pythag', dim: '2',
+    info: { who: 'Albert E. Bosman, 1942', dim: '2 (at 45°)', rule: 'square → two squares on the legs of a right triangle',
+      blurb: 'Two smaller squares grow from the top of each square, sitting on the legs of a right triangle. By the Pythagorean theorem the two children always have the same total area as their parent, so every level has equal area.',
+      tip: '<b>Try:</b> angles far from 45° bend the whole tree to one side.' } },
+  { id: 'carpet', group: 'Recursive geometry', name: 'Sierpinski carpet', kind: 'grid', mask: [1,1,1,1,0,1,1,1,1], dim: '1.893',
+    info: { who: 'Wacław Sierpiński, 1916', dim: 'log 8 / log 3 ≈ 1.893', rule: 'keep 8 of 9 squares, remove the center',
+      blurb: 'Split a square into a 3 × 3 grid, remove the middle, and repeat on the eight that remain. The finished carpet has zero area, yet it contains a copy of every curve that can be drawn in the plane.',
+      tip: '<b>Try:</b> the darker holes show the step at which each one was cut.' } },
+  { id: 'vicsek', group: 'Recursive geometry', name: 'Vicsek fractal', kind: 'grid', mask: [0,1,0,1,1,1,0,1,0], dim: '1.465',
+    info: { who: 'Tamás Vicsek, 1980s', dim: 'log 5 / log 3 ≈ 1.465', rule: 'keep the center and four edge squares',
+      blurb: 'Keep the center square and its four neighbors in a 3 × 3 grid, and repeat. The result is a cross that keeps branching but never closes a loop.',
+      tip: '<b>Try:</b> compare depth 2 and depth 5 to see the same cross at every scale.' } },
+  { id: 'cantor', group: 'Recursive geometry', name: 'Cantor dust', kind: 'grid', mask: [1,0,1,0,0,0,1,0,1], dim: '1.262',
+    info: { who: 'Georg Cantor, 1883 (the 1D set)', dim: 'log 4 / log 3 ≈ 1.262', rule: 'keep only the four corner squares',
+      blurb: 'The Cantor set in two dimensions. Only the four corners survive each step. What remains is uncountably many points, no two of them connected, with total area zero.',
+      tip: '<b>Try:</b> step from depth 1 upward and watch the squares turn to dust.' } },
+];
+const byId = Object.fromEntries(FR.map(f => [f.id, f]));
+const LSYS_PRESETS = FR.filter(f => f.kind === 'lsys' && !f.lab);
+
+// ---------- dom helpers ----------
+const $ = s => document.querySelector(s);
+function h(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+}
+function slider({ id, label, min, max, step, value, fmt = v => v, oninput }) {
+  const out = h('output', {}, fmt(value));
+  const inp = h('input', { type: 'range', id, min, max, step });
+  inp.value = value;
+  inp.addEventListener('input', () => { const v = parseFloat(inp.value); out.textContent = fmt(v); oninput(v); });
+  return h('div', { class: 'ctl' }, h('label', { for: id }, h('span', {}, label), out), inp);
+}
+const fix = n => v => (+v).toFixed(n);
+
+// ---------- WebGL escape-time renderer ----------
+const FS = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+uniform vec2 uRes; uniform vec2 uCenter; uniform float uScale;
+uniform int uType; uniform int uIter; uniform vec2 uC; uniform float uPow;
+uniform vec3 uA, uB, uCc, uD; uniform float uShift; uniform float uDensity;
+vec3 pal(float t){ return clamp(uA + uB*cos(6.283185*(uCc*t + uD)), 0.0, 1.0); }
+vec2 cmul(vec2 a, vec2 b){ return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
+vec2 cdiv(vec2 a, vec2 b){ return vec2(a.x*b.x + a.y*b.y, a.y*b.x - a.x*b.y) / dot(b,b); }
+void main(){
+  vec2 off = (gl_FragCoord.xy - 0.5*uRes) * uScale;
+  if (uType == 2) off.y = -off.y;
+  vec2 p = uCenter + off;
+  vec3 inside = vec3(0.024, 0.027, 0.043);
+  if (uType == 4) {
+    vec2 z = p; float n = 0.0; int root = -1;
+    for (int i = 0; i < 1000; i++) {
+      if (i >= uIter) break;
+      vec2 z2 = cmul(z, z);
+      z -= cdiv(cmul(z2, z) - vec2(1.0, 0.0), 3.0*z2);
+      if (distance(z, vec2(1.0, 0.0)) < 1e-4) { root = 0; break; }
+      if (distance(z, vec2(-0.5, 0.8660254)) < 1e-4) { root = 1; break; }
+      if (distance(z, vec2(-0.5, -0.8660254)) < 1e-4) { root = 2; break; }
+      n += 1.0;
+    }
+    if (root < 0) { gl_FragColor = vec4(inside, 1.0); return; }
+    vec3 col = pal(float(root)/3.0 + uShift);
+    float shade = 0.25 + 0.75*exp(-n*uDensity*0.4);
+    gl_FragColor = vec4(col*shade, 1.0);
+    return;
+  }
+  vec2 z, c;
+  if (uType == 1) { z = p; c = uC; } else { z = vec2(0.0); c = p; }
+  float n = 0.0; bool esc = false;
+  for (int i = 0; i < 5000; i++) {
+    if (i >= uIter) break;
+    if (uType == 2) z = abs(z);
+    if (uType == 3) z.y = -z.y;
+    if (uType == 5) {
+      float r = length(z);
+      if (r == 0.0) z = c;
+      else { float a = atan(z.y, z.x)*uPow; z = pow(r, uPow)*vec2(cos(a), sin(a)) + c; }
+    } else {
+      z = cmul(z, z) + c;
+    }
+    if (dot(z, z) > 256.0) { esc = true; break; }
+    n += 1.0;
+  }
+  if (!esc) { gl_FragColor = vec4(inside, 1.0); return; }
+  float sn = n + 1.0 - log(log(length(z)))/log(max(uPow, 1.01));
+  gl_FragColor = vec4(pal(0.5 + (sqrt(max(sn, 0.0)) - 1.0)*uDensity + uShift), 1.0);
+}`;
+function makeGL(canvas) {
+  const gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: true });
+  if (!gl) return null;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }'));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog); gl.useProgram(prog);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const U = {}; for (const n of ['uRes','uCenter','uScale','uType','uIter','uC','uPow','uA','uB','uCc','uD','uShift','uDensity']) U[n] = gl.getUniformLocation(prog, n);
+  return u => {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    const [a, b, c, d] = PALETTES[G.palette];
+    gl.uniform2f(U.uRes, canvas.width, canvas.height); gl.uniform2f(U.uCenter, u.cx, u.cy); gl.uniform1f(U.uScale, u.scale);
+    gl.uniform1i(U.uType, u.type); gl.uniform1i(U.uIter, u.iter); gl.uniform2f(U.uC, u.c[0], u.c[1]); gl.uniform1f(U.uPow, u.pow);
+    gl.uniform3fv(U.uA, a); gl.uniform3fv(U.uB, b); gl.uniform3fv(U.uCc, c); gl.uniform3fv(U.uD, d);
+    gl.uniform1f(U.uShift, G.shift); gl.uniform1f(U.uDensity, u.density);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  };
+}
+
+const glc = $('#gl'), c2 = $('#c2'), ctx = c2.getContext('2d');
+let drawGL = null, drawMini = null, glError = '';
+try { drawGL = makeGL(glc); drawMini = makeGL($('#miniGl')); if (!drawGL) glError = 'WebGL is not available in this browser.'; }
+catch (e) { glError = 'WebGL failed to start: ' + e.message; }
+
+// ---------- deep zoom: perturbation around a big-number reference orbit ----------
+// One point's orbit is computed exactly with BigInt fixed-point math; the GPU then
+// iterates only each pixel's tiny offset from it, which single precision can hold.
+const FB = 192n, FBN = 192, ONE = 1n << FB, TWO_FB = 2 ** FBN, DEEP_MIN = 1e-30;
+function toBig(x) {
+  if (!x) return 0n;
+  const sh = 52 - Math.floor(Math.log2(Math.abs(x)));
+  const m = BigInt(Math.round(x * 2 ** sh)), k = FBN - sh;
+  return k >= 0 ? m << BigInt(k) : m >> BigInt(-k);
+}
+const fromBig = b => Number(b) / TWO_FB;
+function decToBig(str) {
+  str = String(str).trim().replace('−', '-');
+  const neg = str[0] === '-'; if (neg || str[0] === '+') str = str.slice(1);
+  const [i, f = ''] = str.split('.'), d = 10n ** BigInt(f.length);
+  const v = ((BigInt(i || '0') * d + BigInt(f || '0')) << FB) / d;
+  return neg ? -v : v;
+}
+function bigToDec(b, digits) {
+  const neg = b < 0n; if (neg) b = -b;
+  const p = 10n ** BigInt(digits), t = (b * p + (ONE >> 1n)) >> FB;
+  return (neg ? '−' : '') + (t / p) + '.' + (t % p).toString().padStart(digits, '0');
+}
+function refOrbit(cx, cy, n) {
+  const out = new Float32Array((n + 1) * 2), four = 4n << FB;
+  let x = 0n, y = 0n, len = 1;
+  for (let i = 0; i < n; i++) {
+    const x2 = (x * x) >> FB, y2 = (y * y) >> FB;
+    if (x2 + y2 > four) break;
+    y = ((x * y) >> (FB - 1n)) + cy; x = x2 - y2 + cx;
+    out[len * 2] = fromBig(x); out[len * 2 + 1] = fromBig(y); len++;
+  }
+  return { data: out, len, escaped: len < n + 1 };
+}
+const DEEP_FS = `#version 300 es
+precision highp float; precision highp int;
+uniform sampler2D uRef; uniform int uRefLen; uniform int uIter;
+uniform vec2 uRes; uniform float uScale; uniform vec2 uOff;
+uniform vec3 uA, uB, uCc, uD; uniform float uShift; uniform float uDensity;
+out vec4 outColor;
+vec3 pal(float t){ return clamp(uA + uB*cos(6.283185*(uCc*t + uD)), 0.0, 1.0); }
+vec2 refAt(int m){ return texelFetch(uRef, ivec2(m & 4095, m >> 12), 0).xy; }
+void main(){
+  vec2 dc = (gl_FragCoord.xy - 0.5*uRes)*uScale + uOff;
+  vec2 dz = vec2(0.0), z = vec2(0.0);
+  int m = 0; float n = 0.0; bool esc = false;
+  for (int i = 0; i < uIter; i++) {
+    vec2 Z = refAt(m);
+    dz = vec2(2.0*(Z.x*dz.x - Z.y*dz.y) + dz.x*dz.x - dz.y*dz.y,
+              2.0*(Z.x*dz.y + Z.y*dz.x) + 2.0*dz.x*dz.y) + dc;
+    m++;
+    z = refAt(m) + dz;
+    float r2 = dot(z, z);
+    if (r2 > 256.0) { esc = true; break; }
+    // Rebase onto the start of the orbit when the offset outgrows the point itself
+    if (r2 < dot(dz, dz) || m >= uRefLen - 1) { dz = z; m = 0; }
+    n += 1.0;
+  }
+  if (!esc) { outColor = vec4(0.024, 0.027, 0.043, 1.0); return; }
+  float sn = n + 1.0 - log(log(length(z)))/log(2.0);
+  outColor = vec4(pal(0.5 + (sqrt(max(sn, 0.0)) - 1.0)*uDensity + uShift), 1.0);
+}`;
+function makeDeepGL(canvas) {
+  const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true, premultipliedAlpha: false });
+  if (!gl) return null;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, '#version 300 es\nin vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }'));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, DEEP_FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  const U = {}; for (const n of ['uRef','uRefLen','uIter','uRes','uScale','uOff','uA','uB','uCc','uD','uShift','uDensity']) U[n] = gl.getUniformLocation(prog, n);
+  const px = new Uint8Array(4); let refLen = 1;
+  return {
+    upload(data, len) {
+      const W = 4096, H = Math.ceil(len / W), b = new Float32Array(W * H * 2); b.set(data.subarray(0, len * 2));
+      gl.bindTexture(gl.TEXTURE_2D, tex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, W, H, 0, gl.RG, gl.FLOAT, b); refLen = len;
+    },
+    clear() { gl.disable(gl.SCISSOR_TEST); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); },
+    // Draws rows [y0, y0 + rows) and waits for the GPU so the caller can time it.
+    strip(u, y0, rows) {
+      const [a, b, c, d] = PALETTES[G.palette];
+      gl.viewport(0, 0, canvas.width, canvas.height); gl.enable(gl.SCISSOR_TEST); gl.scissor(0, y0, canvas.width, rows);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(U.uRef, 0);
+      gl.uniform1i(U.uRefLen, refLen); gl.uniform1i(U.uIter, u.iter);
+      gl.uniform2f(U.uRes, canvas.width, canvas.height); gl.uniform1f(U.uScale, u.scale); gl.uniform2f(U.uOff, u.off[0], u.off[1]);
+      gl.uniform3fv(U.uA, a); gl.uniform3fv(U.uB, b); gl.uniform3fv(U.uCc, c); gl.uniform3fv(U.uD, d);
+      gl.uniform1f(U.uShift, G.shift); gl.uniform1f(U.uDensity, u.density);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.readPixels(0, y0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    },
+  };
+}
+const gl2c = $('#gl2'), snap = $('#snap'), snapCtx = snap.getContext('2d');
+let deep = null;
+try { deep = makeDeepGL(gl2c); } catch (e) { console.warn('Deep zoom unavailable:', e.message); }
+let deepJob = null, snapView = null;
+
+// ---------- state ----------
+const S = {};
+let cur = null, dirty = true, anim = null;
+const st = () => S[cur.id];
+const isDeep = () => cur && cur.type === 0 && cur.kind === 'escape' && !!deep;
+function setCenter(s, x, y) {
+  if (s.hx !== undefined) { s.hx = decToBig(x); s.hy = decToBig(y); s.cx = fromBig(s.hx); s.cy = fromBig(s.hy); }
+  else { s.cx = +x; s.cy = +y; }
+}
+function moveCenter(s, dx, dy) {
+  if (s.hx !== undefined) { s.hx += toBig(dx); s.hy += toBig(dy); s.cx = fromBig(s.hx); s.cy = fromBig(s.hy); }
+  else { s.cx += dx; s.cy += dy; }
+}
+const autoIter = s => Math.round(300 + 120 * Math.pow(Math.max(0, Math.log10(byId.mandelbrot.view.w / s.w)), 1.4));
+const effIter = s => s.hx !== undefined && s.autoIter ? Math.min(50000, autoIter(s)) : s.iter;
+const rulesToText = r => Object.entries(r).map(([k, v]) => `${k} = ${v}`).join('\n');
+function initState(f) {
+  switch (f.kind) {
+    case 'escape': return { cx: f.view.cx, cy: f.view.cy, w: f.view.w, iter: f.iter, cycle: 20,
+      cRe: f.c ? f.c[0] : 0, cIm: f.c ? f.c[1] : 0, pow: f.pow || 2, miniC: [-0.123, 0.745],
+      ...(f.type === 0 && deep ? { hx: toBig(f.view.cx), hy: toBig(f.view.cy), autoIter: true, diving: false } : {}) };
+    case 'fern': return { variant: 'classic', points: 1500000 };
+    case 'chaos': return { n: 3, r: 0.5, rule: 'none', points: 1500000 };
+    case 'lsys': return { iter: f.iter, angle: f.angle, axiom: f.axiom, rules: rulesToText(f.rules), heading: f.heading, draw: f.draw || '' };
+    case 'tree': return { depth: 11, angle: 24, ratio: 0.72, skew: 0.15, sway: false };
+    case 'pythag': return { depth: 11, angle: 40 };
+    case 'grid': return { depth: 4 };
+  }
+}
+
+// ---------- catalog ui ----------
+function buildCatalog() {
+  const nav = $('#catalog'); const groups = {};
+  for (const f of FR) (groups[f.group] ||= []).push(f);
+  for (const [g, list] of Object.entries(groups)) {
+    nav.append(h('div', { class: 'group' }, h('h3', {}, g),
+      list.map(f => h('button', { class: 'item', 'data-id': f.id, onclick: () => select(f.id) },
+        h('span', {}, f.name), h('span', { class: 'd', title: 'Fractal dimension' }, f.dim)))));
+  }
+  $('#tagline').textContent = `${FR.length} fractals you can zoom, tune and redraw. The number beside each name is its fractal dimension.`;
+}
+
+function select(id) {
+  stopGlide();
+  cur = byId[id] || FR[0];
+  S[cur.id] ||= initState(cur);
+  for (const b of document.querySelectorAll('.item')) b.setAttribute('aria-current', b.dataset.id === cur.id ? 'true' : 'false');
+  const active = document.querySelector('.item[aria-current="true"]');
+  if (active && window.matchMedia('(max-width: 900px)').matches) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+  try { history.replaceState(null, '', '#' + cur.id); } catch (e) {}
+  const isEsc = cur.kind === 'escape';
+  glc.hidden = !isEsc || isDeep(); gl2c.hidden = snap.hidden = !isDeep(); c2.hidden = isEsc;
+  $('#hint').hidden = !isEsc;
+  $('#mini').hidden = !(isEsc && cur.type === 0 && drawMini);
+  $('#stage').classList.toggle('has-mini', !$('#mini').hidden);
+  $('#note').hidden = true;
+  const old = $('.fail'); if (old) old.remove();
+  if (isEsc && glError) $('#stage').append(h('div', { class: 'fail' }, glError + ' The non-escape-time fractals still work.'));
+  buildInfo(); buildControls(); buildLook();
+  stopAnim(); resize(); restart();
+}
+
+function buildInfo() {
+  const i = cur.info;
+  $('#info').replaceChildren(
+    h('p', { class: 'eyebrow' }, cur.group),
+    h('h2', {}, cur.name),
+    h('dl', { class: 'facts' },
+      h('dt', {}, 'Origin'), h('dd', {}, i.who),
+      h('dt', {}, 'Dimension'), h('dd', { class: 'm' }, i.dim),
+      h('dt', {}, 'Rule'), h('dd', { class: 'm' }, i.rule)),
+    h('p', { class: 'blurb' }, i.blurb),
+    h('p', { class: 'tip', html: i.tip }));
+}
+
+function buildLook() {
+  const sw = Object.keys(PALETTES).map(name => {
+    const stops = Array.from({ length: 8 }, (_, k) => css(palRGB(k / 7 + G.shift, name))).join(',');
+    return h('button', { class: 'sw', 'aria-pressed': name === G.palette ? 'true' : 'false', onclick: () => {
+      G.palette = name; try { localStorage.setItem('fa-palette', name); } catch (e) {}
+      buildLook(); restart(); } }, h('i', { style: `background:linear-gradient(90deg,${stops})` }), h('span', {}, name));
+  });
+  $('#look').replaceChildren(h('h4', {}, 'Colors'), h('div', { class: 'swatches' }, sw),
+    slider({ id: 'shift', label: 'Hue shift', min: 0, max: 1, step: 0.01, value: G.shift, fmt: fix(2),
+      oninput: v => { G.shift = v; restart(); } }));
+}
+
+function buildControls() {
+  const s = st(), box = $('#controls'), k = cur.kind, kids = [h('h4', {}, 'Controls')];
+  const re = () => restart();
+  if (k === 'escape') {
+    const deepOn = s.hx !== undefined;
+    const iterCtl = slider({ id: 'iter', label: 'Iterations', min: cur.type === 4 ? 10 : 50, max: cur.type === 4 ? 300 : deepOn ? 50000 : 3000, step: 10, value: effIter(s), oninput: v => { s.iter = v; re(); } });
+    kids.push(iterCtl);
+    if (deepOn) {
+      iterCtl.querySelector('input').disabled = s.autoIter;
+      kids.push(h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'autoiter', checked: s.autoIter, onchange: e => {
+        s.autoIter = e.target.checked; if (!s.autoIter) s.iter = autoIter(s); buildControls(); re(); } }), 'Raise iterations automatically as you zoom'));
+    }
+    kids.push(slider({ id: 'cycle', label: 'Color bands', min: 1, max: 100, step: 1, value: s.cycle, oninput: v => { s.cycle = v; re(); } }));
+    if (cur.type === 1) {
+      kids.push(slider({ id: 'cre', label: 'c, real part', min: -1.6, max: 1.6, step: 0.001, value: s.cRe, fmt: fix(3), oninput: v => { s.cRe = v; re(); } }));
+      kids.push(slider({ id: 'cim', label: 'c, imaginary part', min: -1.6, max: 1.6, step: 0.001, value: s.cIm, fmt: fix(3), oninput: v => { s.cIm = v; re(); } }));
+      kids.push(h('div', { class: 'row' }, cur.cs.map(([n, a, b]) => h('button', { class: 'btn', onclick: () => { s.cRe = a; s.cIm = b; buildControls(); re(); } }, n))));
+    }
+    if (cur.type === 5) kids.push(slider({ id: 'pow', label: 'Power d', min: 1.5, max: 8, step: 0.01, value: s.pow, fmt: fix(2), oninput: v => { s.pow = v; re(); } }));
+    if (cur.places) {
+      kids.push(h('h4', {}, 'Places to visit'));
+      kids.push(h('div', { class: 'row' }, cur.places.map(([n, x, y, w]) => h('button', { class: 'btn', onclick: () => { stopGlide(); setCenter(s, x, y); s.w = w; re(); } }, n))));
+    }
+    kids.push(slider({ id: 'glidespeed', label: 'Glide speed', min: 1.05, max: 3, step: 0.05, value: G.glideSpeed,
+      fmt: v => `×${(+v).toFixed(2)} per second`, oninput: v => { G.glideSpeed = v; } }));
+    kids.push(h('div', { class: 'row' },
+      h('button', { class: 'btn primary', id: 'glide', onclick: () => { if (glide) stopGlide(); else { const [W, H] = stageSize(); startGlide(W / 2, H / 2); } } }, glide ? 'Stop gliding' : 'Glide to center'),
+      h('button', { class: 'btn', onclick: () => { stopGlide(); setCenter(s, cur.view.cx, cur.view.cy); s.w = cur.view.w; re(); } }, 'Reset view')));
+    if (s.hx !== undefined) {
+      const loc = h('input', { type: 'text', id: 'loc', spellcheck: 'false', placeholder: 're  im  width', 'aria-label': 'Location: real part, imaginary part and width' });
+      const go = () => {
+        const parts = loc.value.replace(/[,i]/g, ' ').trim().split(/\s+/);
+        if (parts.length < 2 || parts.slice(0, 2).some(t => !/^[−+-]?\d*\.?\d+$/.test(t))) { loc.value = ''; loc.placeholder = 'Use: real imaginary width'; return; }
+        stopGlide(); setCenter(s, parts[0], parts[1]); const w = parseFloat(parts[2]); if (w > 0) s.w = Math.max(DEEP_MIN, Math.min(w, cur.view.w * 3)); re();
+      };
+      loc.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+      const copy = h('button', { class: 'btn', onclick: () => {
+        const d = Math.max(6, Math.ceil(-Math.log10(s.w)) + 4), txt = `${bigToDec(s.hx, d).replace('−', '-')} ${bigToDec(s.hy, d).replace('−', '-')} ${s.w.toPrecision(4)}`;
+        loc.value = txt;
+        navigator.clipboard?.writeText(txt).then(() => { copy.textContent = 'Copied'; }, () => { loc.select(); copy.textContent = 'Press ⌘C'; });
+        setTimeout(() => { copy.textContent = 'Copy location'; }, 1600);
+      } }, 'Copy location');
+      kids.push(h('h4', {}, 'Location'), h('div', { class: 'locate' }, loc, h('button', { class: 'btn', onclick: go }, 'Go')), h('div', { class: 'row' }, copy));
+      kids.push(h('p', { class: 'small' }, 'Deep zoom reaches about 10³⁰×. Past 10⁶× each frame needs thousands of iterations. Gliding slows itself down to match your computer, so it stays smooth.'));
+    } else {
+      kids.push(h('p', { class: 'small' }, 'Detail runs out near 100,000× magnification because the graphics card works in single precision.'));
+    }
+  } else if (k === 'fern') {
+    kids.push(h('div', { class: 'ctl' }, h('label', { for: 'variant' }, 'Species'),
+      h('select', { id: 'variant', onchange: e => { s.variant = e.target.value; re(); } },
+        Object.entries(FERNS).map(([key, f]) => h('option', { value: key, selected: key === s.variant }, f.name)))));
+    kids.push(pointsSlider(s));
+  } else if (k === 'chaos') {
+    kids.push(slider({ id: 'n', label: 'Vertices', min: 3, max: 8, step: 1, value: s.n, oninput: v => { s.n = v; re(); } }));
+    kids.push(slider({ id: 'r', label: 'Jump toward vertex', min: 0.2, max: 0.8, step: 0.001, value: s.r, fmt: fix(3), oninput: v => { s.r = v; re(); } }));
+    kids.push(h('div', { class: 'ctl' }, h('label', { for: 'rule' }, 'Rule for the next vertex'),
+      h('select', { id: 'rule', onchange: e => { s.rule = e.target.value; re(); } },
+        Object.entries(CHAOS_RULES).map(([key, name]) => h('option', { value: key, selected: key === s.rule }, name)))));
+    kids.push(pointsSlider(s));
+    kids.push(h('h4', {}, 'Presets'));
+    kids.push(h('div', { class: 'row' }, CHAOS_PRESETS.map(([name, n, r, rule]) => h('button', { class: 'btn', onclick: () => { Object.assign(s, { n, r, rule }); buildControls(); re(); } }, name))));
+  } else if (k === 'lsys') {
+    kids.push(slider({ id: 'liter', label: 'Iterations', min: 0, max: cur.maxIter, step: 1, value: s.iter, oninput: v => { s.iter = v; re(); } }));
+    kids.push(slider({ id: 'angle', label: 'Turn angle', min: 1, max: 180, step: 0.5, value: s.angle, fmt: v => v + '°', oninput: v => { s.angle = v; re(); } }));
+    if (cur.lab) {
+      kids.push(h('div', { class: 'ctl' }, h('label', { for: 'axiom' }, 'Axiom'),
+        h('input', { type: 'text', id: 'axiom', value: s.axiom, spellcheck: 'false', oninput: e => { s.axiom = e.target.value; re(); } })));
+      kids.push(h('div', { class: 'ctl' }, h('label', { for: 'rules' }, 'Rules, one per line'),
+        h('textarea', { id: 'rules', spellcheck: 'false', oninput: e => { s.rules = e.target.value; re(); } }, s.rules)));
+      kids.push(h('div', { class: 'ctl' }, h('label', { for: 'preset' }, 'Load a preset'),
+        h('select', { id: 'preset', onchange: e => {
+          const p = byId[e.target.value]; if (!p) return;
+          Object.assign(s, { axiom: p.axiom, rules: rulesToText(p.rules), angle: p.angle, iter: Math.min(p.iter, cur.maxIter), heading: p.heading, draw: p.draw || '' });
+          buildControls(); re(); } },
+          h('option', { value: '' }, 'Choose…'), LSYS_PRESETS.map(p => h('option', { value: p.id }, p.name)))));
+    }
+    kids.push(h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => animateLsys() }, 'Animate drawing')));
+  } else if (k === 'tree') {
+    kids.push(slider({ id: 'tdepth', label: 'Depth', min: 1, max: 15, step: 1, value: s.depth, oninput: v => { s.depth = v; re(); } }));
+    kids.push(slider({ id: 'tangle', label: 'Split angle', min: 0, max: 120, step: 0.5, value: s.angle, fmt: v => v + '°', oninput: v => { s.angle = v; re(); } }));
+    kids.push(slider({ id: 'ratio', label: 'Length ratio', min: 0.4, max: 0.85, step: 0.005, value: s.ratio, fmt: fix(3), oninput: v => { s.ratio = v; re(); } }));
+    kids.push(slider({ id: 'skew', label: 'Lean', min: -1, max: 1, step: 0.01, value: s.skew, fmt: fix(2), oninput: v => { s.skew = v; re(); } }));
+    kids.push(h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'sway', checked: s.sway, onchange: e => { s.sway = e.target.checked; re(); } }), 'Sway in the wind'));
+  } else if (k === 'pythag') {
+    kids.push(slider({ id: 'pdepth', label: 'Depth', min: 1, max: 15, step: 1, value: s.depth, oninput: v => { s.depth = v; re(); } }));
+    kids.push(slider({ id: 'pangle', label: 'Triangle angle', min: 10, max: 80, step: 0.5, value: s.angle, fmt: v => v + '°', oninput: v => { s.angle = v; re(); } }));
+  } else if (k === 'grid') {
+    kids.push(slider({ id: 'gdepth', label: 'Depth', min: 0, max: 7, step: 1, value: s.depth, oninput: v => { s.depth = v; re(); } }));
+  }
+  box.replaceChildren(...kids);
+}
+function pointsSlider(s) {
+  return slider({ id: 'points', label: 'Points to plot', min: 100000, max: 5000000, step: 100000, value: s.points,
+    fmt: v => (v / 1e6).toFixed(1) + ' M', oninput: v => { s.points = v; restart(); } });
+}
+
+// ---------- sizing & loop ----------
+const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
+function resize() {
+  const r = $('#stage').getBoundingClientRect(), k = dpr();
+  const W = Math.max(1, Math.round(r.width * k)), H = Math.max(1, Math.round(r.height * k));
+  for (const c of [glc, c2, gl2c, snap]) if (c.width !== W || c.height !== H) { c.width = W; c.height = H; if (c === snap) snapView = null; }
+}
+new ResizeObserver(() => { if (!cur) return; resize(); restart(); const p = $('#perfPx'); if (p) p.textContent = `${gl2c.width} × ${gl2c.height} per frame`; }).observe($('#stage'));
+
+let job = null;
+function restart() { stopGlide(); stopAnim(); job = null; dirty = true; }
+function stopAnim() { anim = null; }
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (!cur) return;
+  const k = cur.kind;
+  if (k === 'escape') {
+    if (glide) stepGlide(performance.now());
+    if (isDeep()) { if (!glide) { if (dirty) { dirty = false; beginDeep(); } stepDeep(); } }
+    else if (dirty) { dirty = false; drawEscape(); }
+    if (miniDirty) { miniDirty = false; renderMini(); }
+    return;
+  }
+  if (k === 'fern' || k === 'chaos') { if (!job) job = startPoints(); stepPoints(job); return; }
+  if (k === 'lsys') {
+    if (dirty) { dirty = false; job = buildLsys(); drawLsys(job, 1); }
+    if (anim && job) { const p = Math.min(1, (t - anim.t0) / anim.dur); drawLsys(job, p); if (p >= 1) anim = null; }
+    return;
+  }
+  if (k === 'tree') { if (dirty || st().sway) { dirty = false; drawTree(t / 1000); } return; }
+  if (k === 'pythag') { if (dirty) { dirty = false; drawPythag(); } return; }
+  if (k === 'grid') { if (dirty) { dirty = false; drawGrid(); } return; }
+}
+const readout = txt => { $('#readout').textContent = txt; };
+
+// ---------- escape-time drawing & interaction ----------
+function escUniforms(s, W, H) {
+  return { cx: s.cx, cy: s.cy, scale: s.w / Math.min(W, H), type: cur.type, iter: s.iter, c: [s.cRe, s.cIm],
+    pow: cur.type === 5 ? s.pow : 2, density: s.cycle / 100 };
+}
+function beginDeep(view, opts = {}) {
+  const s = st(), W = gl2c.width, H = gl2c.height;
+  view = view || { hx: s.hx, hy: s.hy, w: s.w };
+  const iter = s.autoIter ? Math.min(50000, autoIter(view)) : s.iter;
+  const offFrom = r => [fromBig(view.hx - r.hx), fromBig(view.hy - r.hy)];
+  const want = opts.ref, ref = s.ref;
+  const stale = !ref || (!ref.escaped && ref.cap < iter) ||
+    (want ? ref.hx !== want[0] || ref.hy !== want[1] : Math.hypot(...offFrom(ref)) > 1.5 * view.w);
+  if (stale) {
+    const [rx, ry] = want || [view.hx, view.hy], cap = Math.max(iter, 1000), o = refOrbit(rx, ry, cap);
+    deep.upload(o.data, o.len);
+    s.ref = { hx: rx, hy: ry, cap, escaped: o.escaped };
+  }
+  deep.clear();
+  if (!opts.offscreen) {
+    if (snapView) {
+      const px = view.w / Math.min(W, H) * dpr(), k = snapView.w / view.w;
+      const dx = fromBig(snapView.hx - view.hx) / px, dy = -fromBig(snapView.hy - view.hy) / px;
+      snap.style.transform = `translate(${dx}px, ${dy}px) scale(${k})`;
+    }
+    syncIterSlider(iter);
+    const note = $('#note'); note.hidden = view.w > DEEP_MIN * 1.01;
+    if (!note.hidden) note.textContent = 'Deepest zoom this page supports, about 10³⁰×';
+  }
+  const maxRows = Math.max(1, Math.min(H, Math.floor(1.5e8 / (W * iter))));
+  deepJob = { W, H, y: 0, rows: Math.max(1, Math.min(maxRows, 8)), maxRows, t0: performance.now(), iter, view, offscreen: !!opts.offscreen,
+    u: { iter, scale: view.w / Math.min(W, H), off: offFrom(s.ref), density: s.cycle / 100 } };
+}
+function syncIterSlider(iter) {
+  const el = document.getElementById('iter');
+  if (el && st().autoIter) { el.value = iter; el.parentElement.querySelector('output').textContent = iter; }
+}
+const magText = w => { const m = cur.view.w / w; return m < 1000 ? m.toFixed(m < 10 ? 2 : 0) : m.toExponential(1); };
+const digitsFor = w => Math.max(6, Math.min(40, Math.ceil(-Math.log10(w)) + 3));
+function stepDeep() {
+  const j = deepJob; if (!j || j.done) return;
+  if (j.W !== gl2c.width || j.H !== gl2c.height) { if (glide) stopGlide(); dirty = true; return; }
+  const t0 = performance.now(), budget = j.offscreen ? 9 : 14;
+  while (!j.done && performance.now() - t0 < budget) {
+    const rows = Math.min(j.rows, j.H - j.y), ts = performance.now();
+    deep.strip(j.u, j.H - j.y - rows, rows);
+    const el = performance.now() - ts;
+    j.y += rows;
+    // Grow strips slowly: a band of interior points can cost 100× more than the band above it
+    j.rows = Math.max(1, Math.min(j.maxRows, Math.round(rows * Math.min(1.5, (budget * 0.6) / Math.max(el, 0.5)))));
+    if (j.y >= j.H) j.done = true;
+  }
+  if (j.offscreen) { if (j.done) glideRendered(); return; }
+  const s = st(), d = digitsFor(s.w);
+  const status = j.done ? `${((performance.now() - j.t0) / 1000).toFixed(2)} s` : `${Math.round(j.y / j.H * 100)}%`;
+  readout(`${bigToDec(s.hx, d)} ${s.hy < 0n ? '' : '+'}${bigToDec(s.hy, d)}i   ×${magText(s.w)}   ${j.iter.toLocaleString()} iterations   ${status}`);
+  if (j.done) {
+    snap.style.transform = '';
+    snapCtx.clearRect(0, 0, snap.width, snap.height); snapCtx.drawImage(gl2c, 0, 0);
+    snapView = j.view;
+  }
+}
+
+// ---------- glide: smooth, endless zoom toward a clicked point ----------
+// In deep mode the GPU renders keyframes 1.25× apart off screen, one or two ahead,
+// while the last finished keyframe is magnified with a CSS transform. The display
+// speed adapts to how long keyframes take, so slow math means a slower glide, not a choppy one.
+const GLIDE_STEP = 1.25, LOG_STEP = Math.log(GLIDE_STEP);
+let glide = null;
+const readyCanvas = document.createElement('canvas'), readyCtx = readyCanvas.getContext('2d');
+const probe = document.createElement('canvas'); probe.width = 48; probe.height = 32;
+const probeCtx = probe.getContext('2d', { willReadFrequently: true });
+const stageSize = () => { const r = $('#stage').getBoundingClientRect(); return [r.width, r.height]; };
+const cssScale = w => w / Math.min(gl2c.width, gl2c.height) * dpr();
+function setGlideButton() { const b = $('#glide'); if (b) b.textContent = glide ? 'Stop gliding' : 'Glide to center'; }
+function startGlide(px, py) {
+  stopGlide();
+  const s = st(), now = performance.now();
+  if (!isDeep()) { glide = { fid: cur.id, simple: true, px, py, last: now }; setGlideButton(); return; }
+  const [W, H] = stageSize(), sc = cssScale(s.w);
+  glide = { fid: cur.id, W, H, P: [s.hx + toBig((px - W / 2) * sc), s.hy + toBig((H / 2 - py) * sc)],
+    shown: { view: { hx: s.hx, hy: s.hy, w: s.w }, a: [px, py] }, ready: null, next: null, pending: null,
+    t: 0, rate: 0, avg: 0, last: now, warm: true };
+  setGlideButton();
+}
+function keyAfter(g, k) {
+  const w = Math.max(DEEP_MIN, k.view.w / GLIDE_STEP), sc = cssScale(w);
+  // Drift the target point gently toward the middle of the screen as we go
+  const a = [g.W / 2 + (k.a[0] - g.W / 2) * 0.85, g.H / 2 + (k.a[1] - g.H / 2) * 0.85];
+  return { view: { hx: g.P[0] - toBig((a[0] - g.W / 2) * sc), hy: g.P[1] - toBig((g.H / 2 - a[1]) * sc), w }, a };
+}
+function stepGlide(now) {
+  const g = glide, s = st(), dt = Math.max(0, Math.min(0.1, (now - g.last) / 1000)); g.last = now;
+  if (g.simple) {
+    const before = s.w; zoomAt(g.px, g.py, Math.exp(-Math.log(G.glideSpeed) * dt));
+    if (s.w === before) stopGlide();
+    return;
+  }
+  if (g.warm) { // let the current view finish on screen first
+    if (dirty) { dirty = false; beginDeep(); }
+    stepDeep();
+    if (deepJob && deepJob.done && snapView) {
+      g.warm = false; g.shown.view = snapView;
+      snap.style.transformOrigin = '0 0'; gl2c.style.opacity = '0';
+    }
+    return;
+  }
+  if (!g.pending && !g.next) {
+    const base = g.ready || g.shown;
+    if (base.view.w > DEEP_MIN * 1.01) { g.pending = keyAfter(g, base); g.t0 = performance.now(); beginDeep(g.pending.view, { offscreen: true, ref: g.P }); }
+  }
+  stepDeep();
+  if (glide !== g) return;
+  const maxRate = Math.log(G.glideSpeed), target = g.avg ? Math.min(maxRate, 0.85 * LOG_STEP / g.avg) : maxRate * 0.3;
+  g.rate += (target - g.rate) * Math.min(1, dt * 1.5);
+  g.t += g.rate * dt / LOG_STEP;
+  if (g.t >= 1) { if (g.ready) swapGlide(); else g.t = 1; }
+  if (glide !== g) return;
+  const nx = keyAfter(g, g.shown), k = Math.pow(GLIDE_STEP, g.t);
+  const ax = g.shown.a[0] + (nx.a[0] - g.shown.a[0]) * g.t, ay = g.shown.a[1] + (nx.a[1] - g.shown.a[1]) * g.t;
+  snap.style.transform = `translate(${ax}px, ${ay}px) scale(${k}) translate(${-g.shown.a[0]}px, ${-g.shown.a[1]}px)`;
+  const d = digitsFor(g.shown.view.w);
+  readout(`gliding to ${bigToDec(g.P[0], d)} ${g.P[1] < 0n ? '' : '+'}${bigToDec(g.P[1], d)}i   ×${magText(g.shown.view.w / k)}   ` +
+    (g.avg ? `${g.avg.toFixed(2)} s per step` : 'warming up'));
+}
+function glideRendered() {
+  const g = glide; if (!g || !g.pending) return;
+  const el = (performance.now() - g.t0) / 1000;
+  g.avg = g.avg ? g.avg * 0.7 + el * 0.3 : el;
+  if (!g.ready) { readyCanvas.width = gl2c.width; readyCanvas.height = gl2c.height; readyCtx.drawImage(gl2c, 0, 0); g.ready = g.pending; }
+  else g.next = g.pending; // stays in the GL canvas until the next swap
+  g.pending = null;
+}
+function swapGlide() {
+  const g = glide, s = st();
+  snap.style.transform = '';
+  snapCtx.clearRect(0, 0, snap.width, snap.height); snapCtx.drawImage(readyCanvas, 0, 0);
+  g.shown = g.ready; g.t = Math.min(1, g.t - 1); snapView = g.shown.view;
+  Object.assign(s, { hx: snapView.hx, hy: snapView.hy, w: snapView.w, cx: fromBig(snapView.hx), cy: fromBig(snapView.hy) });
+  syncIterSlider(Math.min(50000, autoIter(s)));
+  if (g.next) { readyCtx.drawImage(gl2c, 0, 0); g.ready = g.next; g.next = null; } else g.ready = null;
+  probeCtx.drawImage(snap, 0, 0, probe.width, probe.height);
+  const px = probeCtx.getImageData(0, 0, probe.width, probe.height).data;
+  let lit = false;
+  for (let i = 0; i < px.length && !lit; i += 4) lit = px[i] > 14 || px[i + 1] > 14 || px[i + 2] > 18;
+  const note = $('#note');
+  if (!lit) { stopGlide(); note.hidden = false; note.textContent = 'You glided inside a mini Mandelbrot. Zoom out and aim for an edge.'; }
+  else if (s.w <= DEEP_MIN * 1.01) { stopGlide(); note.hidden = false; note.textContent = 'Deepest zoom this page supports, about 10³⁰×'; }
+}
+function stopGlide() {
+  const g = glide; if (!g) return;
+  glide = null; setGlideButton();
+  if (g.fid !== (cur && cur.id) || g.simple) return;
+  dirty = true;
+  if (g.warm) return;
+  // Settle on exactly what is on screen right now, then render it sharply
+  const s = st(), k = g.shown, t = Math.min(1, g.t), nx = keyAfter(g, k), w = k.view.w / Math.pow(GLIDE_STEP, t), sc = cssScale(w);
+  const a = [k.a[0] + (nx.a[0] - k.a[0]) * t, k.a[1] + (nx.a[1] - k.a[1]) * t];
+  s.hx = g.P[0] - toBig((a[0] - g.W / 2) * sc); s.hy = g.P[1] - toBig((g.H / 2 - a[1]) * sc); s.w = w;
+  s.cx = fromBig(s.hx); s.cy = fromBig(s.hy);
+  snapView = k.view; snap.style.transformOrigin = ''; gl2c.style.opacity = ''; deepJob = null;
+}
+function drawEscape() {
+  if (!drawGL) { readout(''); return; }
+  const s = st(), t0 = performance.now();
+  drawGL(escUniforms(s, glc.width, glc.height));
+  const mag = cur.view.w / s.w;
+  readout(`center ${fmtC(s.cx, s.cy)}   ×${mag < 1000 ? mag.toFixed(mag < 10 ? 2 : 0) : mag.toExponential(1)}   ${Math.round(performance.now() - t0)} ms`);
+  const note = $('#note');
+  note.hidden = s.w > 2e-5; if (!note.hidden) note.textContent = 'Precision limit reached: pixels will look blocky past here';
+}
+const fmtC = (x, y) => `${x.toFixed(6)} ${y < 0 ? '−' : '+'} ${Math.abs(y).toFixed(6)}i`;
+function toComplex(s, px, py) {
+  const k = dpr(), W = glc.width, H = glc.height, sc = s.w / Math.min(W, H);
+  const flip = cur.type === 2 ? -1 : 1;
+  return [s.cx + (px * k - W / 2) * sc, s.cy + (H / 2 - py * k) * sc * flip];
+}
+function zoomAt(px, py, f) {
+  const s = st(), k = dpr(), W = glc.width, H = glc.height, sc = s.w / Math.min(W, H), flip = cur.type === 2 ? -1 : 1;
+  const ox = (px * k - W / 2) * sc, oy = (H / 2 - py * k) * sc * flip;
+  const nw = Math.min(Math.max(s.w * f, s.hx !== undefined ? DEEP_MIN : 2e-6), cur.view.w * 3), r = nw / s.w;
+  moveCenter(s, ox * (1 - r), oy * (1 - r)); s.w = nw; dirty = true;
+}
+const ptrs = new Map(); let moved = 0, pinch = null, wasGliding = false;
+const local = e => { const r = $('#stage').getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+for (const cv of [glc, gl2c]) {
+cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, local(e)); moved = 0; pinch = null; wasGliding = !!glide; stopGlide(); });
+cv.addEventListener('pointermove', e => {
+  if (!cur || cur.kind !== 'escape') return;
+  const p = local(e), s = st();
+  if (!ptrs.has(e.pointerId)) {
+    if (cur.type === 0 && e.pointerType === 'mouse') { s.miniC = toComplex(s, p[0], p[1]); miniDirty = true; }
+    return;
+  }
+  const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, p);
+  if (ptrs.size === 1) {
+    const dx = p[0] - prev[0], dy = p[1] - prev[1]; moved += Math.abs(dx) + Math.abs(dy);
+    const sc = s.w / Math.min(glc.width, glc.height) * dpr(), flip = cur.type === 2 ? -1 : 1;
+    moveCenter(s, -dx * sc, dy * sc * flip); dirty = true;
+  } else if (ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    if (pinch) zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, pinch / d);
+    pinch = d; moved = 99;
+  }
+});
+const endPtr = e => {
+  if (e.type === 'pointerup' && ptrs.has(e.pointerId) && ptrs.size === 1 && moved < 4 && !wasGliding) startGlide(...local(e));
+  ptrs.delete(e.pointerId); pinch = null;
+};
+cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
+cv.addEventListener('wheel', e => { e.preventDefault(); stopGlide(); const p = local(e); zoomAt(p[0], p[1], Math.exp(e.deltaY * 0.0015)); }, { passive: false });
+}
+
+let miniDirty = true;
+function renderMini() {
+  if (!drawMini || cur.type !== 0) return;
+  const c = st().miniC, m = $('#miniGl');
+  drawMini({ cx: 0, cy: 0, scale: 3.2 / m.width, type: 1, iter: 200, c, pow: 2, density: st().cycle / 100 });
+  $('#miniLabel').textContent = `c = ${c[0].toFixed(3)} ${c[1] < 0 ? '−' : '+'} ${Math.abs(c[1]).toFixed(3)}i`;
+}
+$('#mini').addEventListener('click', () => {
+  const c = st().miniC; select('julia'); Object.assign(st(), { cRe: +c[0].toFixed(4), cIm: +c[1].toFixed(4), cx: 0, cy: 0, w: 3.2 }); buildControls(); restart();
+});
+
+// ---------- point-cloud fractals (fern, chaos game) ----------
+const FERNS = {
+  classic: { name: 'Black spleenwort (classic)', m: [[0,0,0,.16,0,0,.01],[.85,.04,-.04,.85,0,1.6,.85],[.2,-.26,.23,.22,0,1.6,.07],[-.15,.28,.26,.24,0,.44,.07]] },
+  cyclosorus: { name: 'Cyclosorus (mutant)', m: [[0,0,0,.25,0,-.4,.02],[.95,.005,-.005,.93,-.002,.5,.84],[.035,-.2,.16,.04,-.09,.02,.07],[-.04,.2,.16,.04,.083,.12,.07]] },
+  culcita: { name: 'Culcita (mutant)', m: [[0,0,0,.25,0,-.14,.02],[.85,.02,-.02,.83,0,1,.84],[.09,-.28,.3,.11,0,.6,.07],[-.09,.28,.3,.09,0,.7,.07]] },
+};
+const CHAOS_RULES = { none: 'Any vertex', same: 'Not the same vertex twice', ccw: 'Not the next vertex counter-clockwise', adj: 'Not a neighbor of the last vertex' };
+const CHAOS_PRESETS = [['Sierpinski triangle', 3, 0.5, 'none'], ['Pentaflake', 5, 0.618, 'none'], ['Hexaflake', 6, 0.667, 'none'],
+  ['Square, no repeats', 4, 0.5, 'same'], ['Square, no CCW', 4, 0.5, 'ccw'], ['Pentagon, no repeats', 5, 0.5, 'same']];
+
+function makeSystem(s) {
+  if (cur.kind === 'fern') {
+    const m = FERNS[s.variant].m; const sys = { x: 0, y: 0, k: 0, byY: true };
+    sys.next = () => {
+      let r = Math.random(), t = m[m.length - 1];
+      for (const q of m) { if (r < q[6]) { t = q; break; } r -= q[6]; }
+      const x = t[0] * sys.x + t[1] * sys.y + t[4], y = t[2] * sys.x + t[3] * sys.y + t[5]; sys.x = x; sys.y = y;
+    };
+    return sys;
+  }
+  const n = s.n, r = s.r, V = Array.from({ length: n }, (_, i) => [Math.cos(Math.PI / 2 + 2 * Math.PI * i / n), Math.sin(Math.PI / 2 + 2 * Math.PI * i / n)]);
+  const sys = { x: 0, y: 0, k: 0, prev: 0, byY: false };
+  sys.next = () => {
+    let v;
+    for (let tries = 0; tries < 20; tries++) {
+      v = (Math.random() * n) | 0;
+      if (s.rule === 'same' && v === sys.prev) continue;
+      if (s.rule === 'ccw' && v === (sys.prev + 1) % n) continue;
+      if (s.rule === 'adj' && (v === (sys.prev + 1) % n || v === (sys.prev + n - 1) % n)) continue;
+      break;
+    }
+    sys.prev = v; sys.x += (V[v][0] - sys.x) * r; sys.y += (V[v][1] - sys.y) * r; sys.k = v;
+  };
+  sys.n = n;
+  return sys;
+}
+function startPoints() {
+  const s = st(), W = c2.width, H = c2.height, sys = makeSystem(s);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < 30000; i++) { sys.next(); if (i > 50) { x0 = Math.min(x0, sys.x); x1 = Math.max(x1, sys.x); y0 = Math.min(y0, sys.y); y1 = Math.max(y1, sys.y); } }
+  const pad = 0.06, sc = Math.min(W * (1 - 2 * pad) / (x1 - x0 || 1), H * (1 - 2 * pad) / (y1 - y0 || 1));
+  const ox = (W - (x1 - x0) * sc) / 2, oy = (H + (y1 - y0) * sc) / 2;
+  const lut = new Uint8Array(256 * 3);
+  for (let i = 0; i < 256; i++) { const c = palRGB((sys.byY ? 0.08 + i / 255 * 0.34 : i / 255) + G.shift); lut[i * 3] = c[0] * 255; lut[i * 3 + 1] = c[1] * 255; lut[i * 3 + 2] = c[2] * 255; }
+  return { sys, W, H, sc, ox, oy, x0, y0, y1, lut, n: 0, max: 1, total: s.points, t0: performance.now(),
+    cnt: new Float32Array(W * H), R: new Float32Array(W * H), Gc: new Float32Array(W * H), B: new Float32Array(W * H), img: ctx.createImageData(W, H) };
+}
+function stepPoints(j) {
+  if (j.W !== c2.width || j.H !== c2.height) { job = null; return; }
+  if (j.n >= j.total && j.done) return;
+  const { sys, W, H, sc, ox, oy, x0, y0, y1, lut, cnt, R, Gc, B } = j;
+  const batch = Math.min(80000, j.total - j.n), yr = y1 - y0 || 1;
+  for (let i = 0; i < batch; i++) {
+    sys.next();
+    const px = (ox + (sys.x - x0) * sc) | 0, py = (oy - (sys.y - y0) * sc) | 0;
+    if (px < 0 || py < 0 || px >= W || py >= H) continue;
+    const idx = py * W + px;
+    const ci = (sys.byY ? Math.min(255, Math.max(0, ((sys.y - y0) / yr * 255) | 0)) : ((sys.k / sys.n * 256) | 0)) * 3;
+    const c = ++cnt[idx]; R[idx] += lut[ci]; Gc[idx] += lut[ci + 1]; B[idx] += lut[ci + 2];
+    if (c > j.max) j.max = c;
+  }
+  j.n += batch;
+  const d = j.img.data, lm = Math.log(1 + j.max * 0.5);
+  for (let i = 0, p = 0; i < cnt.length; i++, p += 4) {
+    const c = cnt[i];
+    if (!c) { d[p] = BG[0]; d[p + 1] = BG[1]; d[p + 2] = BG[2]; d[p + 3] = 255; continue; }
+    const a = Math.min(1, Math.sqrt(Math.log(1 + c) / lm)), ia = 1 - a;
+    d[p] = BG[0] * ia + R[i] / c * a; d[p + 1] = BG[1] * ia + Gc[i] / c * a; d[p + 2] = BG[2] * ia + B[i] / c * a; d[p + 3] = 255;
+  }
+  ctx.putImageData(j.img, 0, 0);
+  if (j.n >= j.total) j.done = true;
+  readout(`${(j.n / 1e6).toFixed(2)} M of ${(j.total / 1e6).toFixed(1)} M points${j.done ? `  ·  ${((performance.now() - j.t0) / 1000).toFixed(1)} s` : ''}`);
+}
+
+// ---------- L-systems ----------
+function parseRules(text) {
+  const r = {};
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*(\S)\s*(?:=|->|→|:)\s*(.*?)\s*$/);
+    if (m) r[m[1]] = m[2].replace(/\s+/g, '').replace(/−/g, '-');
+  }
+  return r;
+}
+function buildLsys() {
+  const s = st(), rules = cur.lab ? parseRules(s.rules) : cur.rules, axiom = (cur.lab ? s.axiom : cur.axiom).replace(/\s+/g, '').replace(/−/g, '-');
+  let str = axiom, capped = -1;
+  for (let i = 0; i < s.iter; i++) {
+    let len = 0; for (let j = 0; j < str.length; j++) { const q = rules[str[j]]; len += q !== undefined ? q.length : 1; }
+    if (len > 3e6) { capped = i; break; }
+    const parts = new Array(str.length);
+    for (let j = 0; j < str.length; j++) { const q = rules[str[j]]; parts[j] = q !== undefined ? q : str[j]; }
+    str = parts.join('');
+  }
+  const a = s.angle * Math.PI / 180, draw = new Set(['F', 'G', 'A', 'B']), moveOnly = new Set(['f']);
+  if (cur.draw) for (const ch of cur.draw) draw.add(ch);
+  let x = 0, y = 0, hd = (s.heading || 0) * Math.PI / 180;
+  const seg = [], stack = []; let x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (draw.has(ch)) {
+      const nx = x + Math.cos(hd), ny = y + Math.sin(hd); seg.push(x, y, nx, ny); x = nx; y = ny;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    } else if (moveOnly.has(ch)) { x += Math.cos(hd); y += Math.sin(hd); }
+    else if (ch === '+') hd += a; else if (ch === '-') hd -= a; else if (ch === '|') hd += Math.PI;
+    else if (ch === '[') stack.push([x, y, hd]); else if (ch === ']' && stack.length) [x, y, hd] = stack.pop();
+  }
+  const note = $('#note');
+  note.hidden = capped < 0; if (capped >= 0) note.textContent = `Stopped at ${capped} iterations: the next step is over 3 million symbols`;
+  return { seg: Float64Array.from(seg), x0, x1, y0, y1, len: str.length };
+}
+function drawLsys(L, progress) {
+  const W = c2.width, H = c2.height;
+  ctx.fillStyle = `rgb(${BG})`; ctx.fillRect(0, 0, W, H);
+  const n = L.seg.length / 4; if (!n) { readout('Nothing to draw: no F, G, A or B in the final string'); return; }
+  const pad = 0.07, sc = Math.min(W * (1 - 2 * pad) / (L.x1 - L.x0 || 1), H * (1 - 2 * pad) / (L.y1 - L.y0 || 1));
+  const ox = (W - (L.x1 - L.x0) * sc) / 2 - L.x0 * sc, oy = (H + (L.y1 - L.y0) * sc) / 2 + L.y0 * sc;
+  const m = Math.floor(n * progress), K = 96, seg = L.seg;
+  ctx.lineWidth = Math.max(0.7 * dpr(), Math.min(2.4 * dpr(), sc * 0.18)); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let b = 0; b < K; b++) {
+    const s0 = Math.floor(b * n / K), s1 = Math.min(m, Math.floor((b + 1) * n / K));
+    if (s0 >= s1) break;
+    ctx.beginPath(); let px = NaN, py = NaN;
+    for (let i = s0; i < s1; i++) {
+      const ax = ox + seg[i * 4] * sc, ay = oy - seg[i * 4 + 1] * sc, bx = ox + seg[i * 4 + 2] * sc, by = oy - seg[i * 4 + 3] * sc;
+      if (Math.abs(ax - px) > 0.01 || Math.abs(ay - py) > 0.01) ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by); px = bx; py = by;
+    }
+    ctx.strokeStyle = css(palRGB(0.08 + b / K * 0.8 + G.shift)); ctx.stroke();
+  }
+  readout(`${n.toLocaleString()} segments · ${L.len.toLocaleString()} symbols`);
+}
+function animateLsys() {
+  if (!job || !job.seg) return;
+  anim = { t0: performance.now(), dur: Math.min(4000, 1200 + job.seg.length / 4 * 0.05) };
+}
+
+// ---------- recursive geometry ----------
+let treeFit = null;
+function treeSegs(s, t) {
+  const levels = Array.from({ length: s.depth }, () => []), A = s.angle * Math.PI / 180;
+  const br = (x, y, len, ang, d) => {
+    const nx = x + len * Math.cos(ang), ny = y + len * Math.sin(ang);
+    levels[d].push(x, y, nx, ny);
+    if (d + 1 >= s.depth) return;
+    const sw = t == null ? 0 : Math.sin(t * 1.3 + d * 0.55) * 0.035 * (d + 1) / s.depth * 3;
+    br(nx, ny, len * s.ratio, ang + A * (1 + s.skew * 0.6) + sw, d + 1);
+    br(nx, ny, len * s.ratio, ang - A * (1 - s.skew * 0.6) + sw, d + 1);
+  };
+  br(0, 0, 1, Math.PI / 2, 0);
+  return levels;
+}
+const bbox = arrs => { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const a of arrs) for (let i = 0; i < a.length; i += 2) { const x = a[i], y = a[i + 1]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return { x0, x1, y0, y1 }; };
+function fit(b, pad = 0.07) {
+  const W = c2.width, H = c2.height, sc = Math.min(W * (1 - 2 * pad) / (b.x1 - b.x0 || 1), H * (1 - 2 * pad) / (b.y1 - b.y0 || 1));
+  return { sc, ox: (W - (b.x1 - b.x0) * sc) / 2 - b.x0 * sc, oy: (H + (b.y1 - b.y0) * sc) / 2 + b.y0 * sc };
+}
+function drawTree(t) {
+  const s = st(), key = [s.depth, s.angle, s.ratio, s.skew].join();
+  if (!treeFit || treeFit.key !== key) { const b = bbox(treeSegs(s, null)); const m = (b.x1 - b.x0) * 0.04; b.x0 -= m; b.x1 += m; treeFit = { key, ...fit(b) }; }
+  const levels = treeSegs(s, s.sway ? t : null), { sc, ox, oy } = treeFit;
+  ctx.fillStyle = `rgb(${BG})`; ctx.fillRect(0, 0, c2.width, c2.height); ctx.lineCap = 'round';
+  levels.forEach((a, d) => {
+    ctx.beginPath();
+    for (let i = 0; i < a.length; i += 4) { ctx.moveTo(ox + a[i] * sc, oy - a[i + 1] * sc); ctx.lineTo(ox + a[i + 2] * sc, oy - a[i + 3] * sc); }
+    ctx.lineWidth = Math.max(0.6 * dpr(), sc * 0.07 * Math.pow(s.ratio, d * 1.1));
+    ctx.strokeStyle = css(palRGB(0.02 + d / Math.max(1, s.depth - 1) * 0.7 + G.shift)); ctx.stroke();
+  });
+  readout(`${(Math.pow(2, s.depth) - 1).toLocaleString()} branches`);
+}
+function drawPythag() {
+  const s = st(), a = s.angle * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a), levels = Array.from({ length: s.depth }, () => []);
+  const sq = (px, py, vx, vy, d) => {
+    const nx = -vy, ny = vx, p1x = px + vx, p1y = py + vy, p2x = p1x + nx, p2y = p1y + ny, p3x = px + nx, p3y = py + ny;
+    levels[d].push(px, py, p1x, p1y, p2x, p2y, p3x, p3y);
+    if (d + 1 >= s.depth) return;
+    const lx = (vx * ca - vy * sa) * ca, ly = (vx * sa + vy * ca) * ca;
+    sq(p3x, p3y, lx, ly, d + 1);
+    const qx = p3x + lx, qy = p3y + ly; sq(qx, qy, p2x - qx, p2y - qy, d + 1);
+  };
+  sq(0, 0, 1, 0, 0);
+  const { sc, ox, oy } = fit(bbox(levels));
+  ctx.fillStyle = `rgb(${BG})`; ctx.fillRect(0, 0, c2.width, c2.height);
+  levels.forEach((L, d) => {
+    ctx.beginPath();
+    for (let i = 0; i < L.length; i += 8) {
+      ctx.moveTo(ox + L[i] * sc, oy - L[i + 1] * sc);
+      for (let k = 2; k < 8; k += 2) ctx.lineTo(ox + L[i + k] * sc, oy - L[i + k + 1] * sc);
+      ctx.closePath();
+    }
+    ctx.fillStyle = css(palRGB(0.02 + d / Math.max(1, s.depth - 1) * 0.75 + G.shift)); ctx.fill();
+  });
+  readout(`${(Math.pow(2, s.depth) - 1).toLocaleString()} squares`);
+}
+function drawGrid() {
+  const s = st(), W = c2.width, H = c2.height, S = Math.floor(Math.min(W, H) * 0.88), x0 = (W - S) >> 1, y0 = (H - S) >> 1, mask = cur.mask, d = s.depth;
+  const img = ctx.createImageData(W, H), D = img.data;
+  const inLut = [], holeLut = [];
+  for (let i = 0; i < 64; i++) inLut.push(palRGB(0.05 + i / 63 * 0.6 + G.shift).map(v => v * 255));
+  for (let k = 0; k <= d; k++) holeLut.push(palRGB(0.65 + k / Math.max(1, d) * 0.3 + G.shift).map(v => v * 255 * (0.10 + 0.14 * k / Math.max(1, d))));
+  for (let p = 0; p < D.length; p += 4) { D[p] = BG[0]; D[p + 1] = BG[1]; D[p + 2] = BG[2]; D[p + 3] = 255; }
+  for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+    let u = (px + 0.5) / S, v = (py + 0.5) / S, level = -1;
+    for (let k = 0; k < d; k++) { u *= 3; v *= 3; const i = u | 0, j = v | 0; u -= i; v -= j; if (!mask[j * 3 + i]) { level = k; break; } }
+    const c = level < 0 ? inLut[(((px + (S - py)) / (2 * S)) * 63) | 0] : holeLut[level];
+    const p = ((py + y0) * W + px + x0) * 4; D[p] = c[0]; D[p + 1] = c[1]; D[p + 2] = c[2];
+  }
+  ctx.putImageData(img, 0, 0);
+  const kept = mask.reduce((a, b) => a + b, 0);
+  readout(`${Math.pow(kept, d).toLocaleString()} squares of side 1/${Math.pow(3, d).toLocaleString()}`);
+}
+
+// ---------- performance & limits ----------
+function buildPerf() {
+  let gpu = 'Unknown';
+  try {
+    const g = document.createElement('canvas').getContext('webgl'), ext = g && g.getExtension('WEBGL_debug_renderer_info');
+    if (g) gpu = ext ? g.getParameter(ext.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER);
+    gpu = String(gpu).replace(/^ANGLE \((.*)\)$/, '$1').replace(/, Unspecified Version$/, '');
+  } catch (e) {}
+  const [W, H] = [gl2c.width || glc.width, gl2c.height || glc.height];
+  const limits = [
+    'Your graphics chip does the heavy lifting. Apple Silicon Macs and computers with a dedicated graphics card draw most deep views in under a second. Older laptops, Chromebooks and phones can take several seconds per frame.',
+    'Use a current version of Chrome, Edge, Safari or Firefox. Deep zoom needs WebGL2. Without it the Mandelbrot set stops at about 100,000×.',
+    'Gliding slows itself down to match how fast your computer finishes each frame. A slower machine glides more slowly instead of stuttering.',
+    'Mandelbrot deep zoom ends at about 10³⁰×. Julia, Burning Ship, Tricorn, Multibrot and Newton stop at about 100,000× because they use single precision.',
+    'Views full of dark interior are the slowest, because every dark pixel runs every iteration. Aim for the colorful edges.',
+    'Battery saver and low-power modes slow the graphics chip down. Plug in for the smoothest glide.',
+    'High-resolution screens have more pixels to compute. Rendering is capped at twice the screen size in each direction to keep it manageable; a smaller window is faster.',
+    'The fern, chaos game and L-systems run on the main processor. Their largest settings take a few seconds.',
+  ];
+  $('#perf').replaceChildren(
+    h('h4', {}, 'Performance & limits'),
+    h('dl', { class: 'facts' },
+      h('dt', {}, 'Deep zoom'), deep ? h('dd', { class: 'ok' }, 'Available on this browser') : h('dd', { class: 'bad' }, 'Unavailable: WebGL2 is missing'),
+      h('dt', {}, 'Graphics'), h('dd', { class: 'm' }, gpu),
+      h('dt', {}, 'Pixels'), h('dd', { class: 'm', id: 'perfPx' }, `${W} × ${H} per frame`)),
+    h('ul', { class: 'limits' }, limits.map(t => h('li', {}, t))));
+}
+$('#perfLink').addEventListener('click', () => $('#perf').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+
+// ---------- boot ----------
+buildCatalog();
+const start = (location.hash || '').slice(1);
+select(byId[start] ? start : 'mandelbrot');
+buildPerf();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
