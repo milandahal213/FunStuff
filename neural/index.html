@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inside a Neural Network</title>
+<meta name="description" content="Seven interactive chapters that build a neural network from a single neuron up to a trainable playground and convolution, all running live in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: numbered chapter list | live figures | explanation and controls; stacks on phones.
+   Single dark theme to match the other FunStuff sites. Blue = positive, orange = negative throughout. */
+:root {
+  --ink: #0b0c10;
+  --panel: #14161d;
+  --line: #262935;
+  --fg: #e9e8f0;
+  --muted: #8f93a6;
+  --accent: #c4a7ff;
+  --accent-soft: rgba(196, 167, 255, 0.13);
+  --pos: #4fa8ff;
+  --neg: #ff9147;
+  --display: "Fraunces", Georgia, serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--ink); color: var(--fg); font-family: var(--body); font-size: 14px; line-height: 1.5; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 340px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header h1 { font-family: var(--display); font-weight: 650; font-size: 28px; line-height: 1.1; margin: 0; letter-spacing: -0.01em; }
+header h1 em { color: var(--accent); font-style: normal; }
+header p { margin: 0; color: var(--muted); }
+.back { color: var(--muted); text-decoration: none; font-size: 12.5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; align-self: center; }
+.back:hover { color: var(--accent); border-color: var(--accent); }
+
+.catalog { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 3px; counter-reset: ch; }
+.item { display: grid; grid-template-columns: 26px 1fr; column-gap: 8px; background: none; border: 0; border-radius: 8px; padding: 9px 10px; text-align: left; cursor: pointer; }
+.item:hover { background: var(--panel); }
+.item .n { grid-row: span 2; font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 2px; font-variant-numeric: tabular-nums; }
+.item b { font-weight: 500; }
+.item span:last-child { font-size: 12.5px; color: var(--muted); }
+.item[aria-current="true"] { background: var(--accent-soft); }
+.item[aria-current="true"] b, .item[aria-current="true"] .n { color: var(--accent); }
+
+.stage { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.status { font-family: var(--mono); font-size: 12px; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; font-variant-numeric: tabular-nums; white-space: pre-wrap; min-height: 34px; }
+.panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; align-items: start; }
+.pane { margin: 0; background: #0f1015; border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pane.wide { grid-column: 1 / -1; }
+.pane figcaption { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.pane canvas { width: 100%; display: block; border-radius: 6px; touch-action: none; }
+
+.panel { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 11px; }
+.card h2 { font-family: var(--display); font-weight: 650; font-size: 24px; line-height: 1.15; margin: 0; text-wrap: balance; }
+.card h4 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.card p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+.tip { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+.tip b { color: var(--fg); font-weight: 600; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+
+.ctl { display: flex; flex-direction: column; gap: 3px; }
+.ctl label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.ctl output { font-family: var(--mono); font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn { background: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12.5px; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1030; font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); color: #1a1030; }
+.seg { display: flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { flex: 1 1 auto; background: var(--ink); border: 0; border-right: 1px solid var(--line); padding: 5px 8px; cursor: pointer; font-size: 12.5px; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.check input { accent-color: var(--accent); }
+.small { font-size: 12px; color: var(--muted); }
+.kernel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.kernel input { width: 100%; background: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 8px 4px; text-align: center; font-family: var(--mono); font-size: 14px; }
+
+@media (max-width: 1150px) { .app { grid-template-columns: 210px minmax(0, 1fr) 300px; } }
+@media (max-width: 900px) {
+  html, body { height: auto; }
+  .app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .catalog { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+  .item { border: 1px solid var(--line); white-space: nowrap; }
+  .item span:last-child { display: none; }
+  .stage { overflow: visible; }
+  .panes { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <a class="back" href="../">← FunStuff</a>
+    <h1>Inside a <em>Neural Network</em></h1>
+    <p>Seven chapters, from one neuron to a network you can train. Everything runs live in your browser.</p>
+  </header>
+  <nav class="catalog" id="catalog" aria-label="Chapters"></nav>
+  <main class="stage" id="stage">
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="panes" id="panes"></div>
+  </main>
+  <aside class="panel">
+    <section class="card" id="info"></section>
+    <section class="card" id="controls"></section>
+  </aside>
+</div>
+
+<script>
+// ---------- dom helpers ----------
+const $ = s => document.querySelector(s);
+function h(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+}
+function slider({ id, label, min, max, step, value, fmt = v => v, oninput }) {
+  const out = h('output', {}, fmt(value));
+  const inp = h('input', { type: 'range', id, min, max, step });
+  inp.value = value;
+  inp.addEventListener('input', () => { const v = parseFloat(inp.value); out.textContent = fmt(v); oninput(v); });
+  const wrap = h('div', { class: 'ctl' }, h('label', { for: id }, h('span', {}, label), out), inp);
+  wrap.set = v => { inp.value = v; out.textContent = fmt(v); };
+  return wrap;
+}
+function check({ id, label, checked, onchange }) {
+  return h('label', { class: 'check' }, h('input', { type: 'checkbox', id, checked, onchange: e => onchange(e.target.checked) }), label);
+}
+function seg({ label, options, value, onchange }) {
+  const wrap = h('div', { class: 'seg', role: 'group', 'aria-label': label });
+  const set = v => { for (const b of wrap.children) b.setAttribute('aria-pressed', b.dataset.v === String(v) ? 'true' : 'false'); };
+  for (const [v, text] of options) wrap.append(h('button', { 'data-v': v, onclick: () => { set(v); onchange(v); } }, text));
+  set(value);
+  const c = h('div', { class: 'ctl' }, label ? h('label', {}, h('span', {}, label)) : null, wrap);
+  c.set = set;
+  return c;
+}
+const buttons = list => h('div', { class: 'row' }, list.map(([text, fn, primary, id]) => h('button', { class: primary ? 'btn primary' : 'btn', onclick: fn, id }, text)));
+const status = t => { const s = $('#status'); if (s.textContent !== t) s.textContent = t; };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+// ---------- colors ----------
+const C = { bg: '#0f1015', fg: '#e9e8f0', muted: '#8f93a6', line: '#262935', accent: '#c4a7ff', pos: '#4fa8ff', neg: '#ff9147' };
+const BG = [15, 16, 21], POS = [79, 168, 255], NEG = [255, 145, 71];
+function valColor(v, k = 1) {
+  v = clamp(v, -1, 1); const c = v >= 0 ? POS : NEG, t = Math.abs(v) * k;
+  return [BG[0] + (c[0] - BG[0]) * t, BG[1] + (c[1] - BG[1]) * t, BG[2] + (c[2] - BG[2]) * t];
+}
+const rgb = c => `rgb(${c.map(Math.round).join(',')})`;
+const wColor = w => w >= 0 ? C.pos : C.neg;
+
+// ---------- seeded randomness ----------
+function rng(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
+const gauss = r => Math.sqrt(-2 * Math.log(r() + 1e-12)) * Math.cos(2 * Math.PI * r());
+
+// ---------- activation functions ----------
+const ACT = {
+  none: { f: z => z, d: () => 1, label: 'none' },
+  linear: { f: z => z, d: () => 1, label: 'linear' },
+  step: { f: z => z > 0 ? 1 : 0, d: () => 0, label: 'step' },
+  sigmoid: { f: z => 1 / (1 + Math.exp(-z)), d: (z, a) => a * (1 - a), label: 'sigmoid' },
+  tanh: { f: Math.tanh, d: (z, a) => 1 - a * a, label: 'tanh' },
+  relu: { f: z => z > 0 ? z : 0, d: z => z > 0 ? 1 : 0, label: 'ReLU' },
+};
+
+// ---------- a tiny multilayer network with backpropagation and Adam ----------
+class MLP {
+  constructor(sizes, act = 'tanh', out = 'sigmoid', seed = 1) {
+    this.sizes = sizes; this.act = act; this.out = out; this.steps = 0;
+    const r = rng(seed);
+    this.W = []; this.B = []; this.m = []; this.v = [];
+    for (let l = 1; l < sizes.length; l++) {
+      const ni = sizes[l - 1], no = sizes[l], hidden = l < sizes.length - 1;
+      const sc = act === 'relu' && hidden ? Math.sqrt(2 / ni) : Math.sqrt(1 / ni);
+      const W = new Float64Array(no * ni); for (let i = 0; i < W.length; i++) W[i] = gauss(r) * sc;
+      this.W.push(W); this.B.push(new Float64Array(no).fill(act === 'relu' && hidden ? 0.05 : 0));
+      this.m.push([new Float64Array(no * ni), new Float64Array(no)]); this.v.push([new Float64Array(no * ni), new Float64Array(no)]);
+    }
+  }
+  fn(l) { return l === this.sizes.length - 1 ? this.out : this.act; }
+  forward(x) {
+    const A = [Float64Array.from(x)], Z = [null];
+    for (let l = 1; l < this.sizes.length; l++) {
+      const ni = this.sizes[l - 1], no = this.sizes[l], W = this.W[l - 1], B = this.B[l - 1], prev = A[l - 1], f = ACT[this.fn(l)].f;
+      const z = new Float64Array(no), a = new Float64Array(no);
+      for (let o = 0; o < no; o++) { let s = B[o]; for (let i = 0; i < ni; i++) s += W[o * ni + i] * prev[i]; z[o] = s; a[o] = f(s); }
+      Z.push(z); A.push(a);
+    }
+    return { A, Z };
+  }
+  predict(x) { const { A } = this.forward(x); return A[A.length - 1][0]; }
+  // One full-batch step. X: inputs, Y: targets. Returns mean loss.
+  train(X, Y, lr) {
+    const L = this.sizes.length - 1, gW = this.W.map(w => new Float64Array(w.length)), gB = this.B.map(b => new Float64Array(b.length));
+    let loss = 0;
+    for (let n = 0; n < X.length; n++) {
+      const { A, Z } = this.forward(X[n]), y = Y[n], out = A[L];
+      let delta = new Float64Array(out.length);
+      for (let o = 0; o < out.length; o++) {
+        const a = out[o], t = Array.isArray(y) ? y[o] : y;
+        delta[o] = a - t;   // sigmoid + cross-entropy and linear + squared error share this gradient
+        loss += this.out === 'sigmoid' ? -(t * Math.log(a + 1e-9) + (1 - t) * Math.log(1 - a + 1e-9)) : 0.5 * (a - t) ** 2;
+      }
+      for (let l = L; l >= 1; l--) {
+        const ni = this.sizes[l - 1], no = this.sizes[l], W = this.W[l - 1], prev = A[l - 1], gw = gW[l - 1], gb = gB[l - 1];
+        for (let o = 0; o < no; o++) { gb[o] += delta[o]; for (let i = 0; i < ni; i++) gw[o * ni + i] += delta[o] * prev[i]; }
+        if (l > 1) {
+          const d = ACT[this.act].d, nd = new Float64Array(ni);
+          for (let i = 0; i < ni; i++) { let s = 0; for (let o = 0; o < no; o++) s += W[o * ni + i] * delta[o]; nd[i] = s * d(Z[l - 1][i], A[l - 1][i]); }
+          delta = nd;
+        }
+      }
+    }
+    this.steps++;
+    const b1 = 0.9, b2 = 0.999, t = this.steps, c1 = 1 - b1 ** t, c2 = 1 - b2 ** t, N = X.length;
+    const upd = (P, G, M, V) => { for (let i = 0; i < P.length; i++) { const g = G[i] / N; M[i] = b1 * M[i] + (1 - b1) * g; V[i] = b2 * V[i] + (1 - b2) * g * g; P[i] -= lr * (M[i] / c1) / (Math.sqrt(V[i] / c2) + 1e-8); } };
+    for (let l = 0; l < L; l++) { upd(this.W[l], gW[l], this.m[l][0], this.v[l][0]); upd(this.B[l], gB[l], this.m[l][1], this.v[l][1]); }
+    return loss / X.length;
+  }
+}
+
+// ---------- datasets in the square [-1, 1]² ----------
+const DATASETS = [['blobs', 'Two blobs'], ['xor', 'XOR'], ['circle', 'Circle'], ['spiral', 'Spiral']];
+function makeData(kind, n, noise, seed) {
+  const r = rng(seed), pts = [];
+  for (let i = 0; i < n; i++) {
+    let x, y, c;
+    if (kind === 'blobs') { c = i % 2; const m = c ? 0.42 : -0.42; x = m + gauss(r) * (0.17 + noise * 0.6); y = m + gauss(r) * (0.17 + noise * 0.6); }
+    else if (kind === 'xor') { x = r() * 1.8 - 0.9; y = r() * 1.8 - 0.9; if (Math.abs(x) < 0.08) x += Math.sign(x || 1) * 0.08; if (Math.abs(y) < 0.08) y += Math.sign(y || 1) * 0.08; c = x * y > 0 ? 1 : 0; x += gauss(r) * noise * 0.4; y += gauss(r) * noise * 0.4; }
+    else if (kind === 'circle') { c = i % 2; const rad = c ? r() * 0.45 : 0.62 + r() * 0.3, t = r() * Math.PI * 2; x = rad * Math.cos(t) + gauss(r) * noise * 0.4; y = rad * Math.sin(t) + gauss(r) * noise * 0.4; }
+    else { c = i % 2; const k = (i >> 1) / (n / 2), rad = 0.08 + k * 0.85, t = k * 1.75 * Math.PI * 2 + c * Math.PI; x = rad * Math.cos(t) + gauss(r) * noise * 0.3; y = rad * Math.sin(t) + gauss(r) * noise * 0.3; }
+    pts.push({ x: clamp(x, -0.98, 0.98), y: clamp(y, -0.98, 0.98), c });
+  }
+  return pts;
+}
+
+// ---------- figure panes ----------
+const panes = [];
+function pane(title, aspect = 1, { wide = false } = {}) {
+  const c = h('canvas', { style: `aspect-ratio:${aspect}` });
+  const el = h('figure', { class: 'pane' + (wide ? ' wide' : '') }, h('figcaption', {}, title), c);
+  $('#panes').append(el);
+  const p = { el, c, ctx: c.getContext('2d'), w: 1, h: 1 };
+  p.fit = () => {
+    const r = c.getBoundingClientRect(), W = Math.max(1, Math.round(r.width * DPR)), H = Math.max(1, Math.round(r.height * DPR));
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    p.w = r.width || 1; p.h = r.height || 1; p.ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  };
+  p.local = e => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  p.clear = () => { p.ctx.fillStyle = C.bg; p.ctx.fillRect(0, 0, p.w, p.h); };
+  panes.push(p); p.fit();
+  return p;
+}
+// Pointer dragging on a pane: fn(x, y, event, phase)
+function drag(p, fn) {
+  let on = false;
+  p.c.addEventListener('pointerdown', e => { on = true; p.c.setPointerCapture(e.pointerId); fn(...p.local(e), e, 'down'); });
+  p.c.addEventListener('pointermove', e => { if (on) fn(...p.local(e), e, 'move'); else fn(...p.local(e), e, 'hover'); });
+  const end = e => { if (on) { on = false; fn(...p.local(e), e, 'up'); } };
+  p.c.addEventListener('pointerup', end); p.c.addEventListener('pointercancel', end);
+  p.c.addEventListener('pointerleave', e => { if (!on) fn(...p.local(e), e, 'leave'); });
+}
+
+// Square plot area inside a pane for the [-1,1]² plane
+function planeBox(p, pad = 8) { const s = Math.min(p.w, p.h) - pad * 2; return { x0: (p.w - s) / 2, y0: (p.h - s) / 2, s }; }
+const toPx = (b, x, y) => [b.x0 + (x + 1) / 2 * b.s, b.y0 + (1 - y) / 2 * b.s];
+const fromPx = (b, px, py) => [(px - b.x0) / b.s * 2 - 1, 1 - (py - b.y0) / b.s * 2];
+// Heatmap of f(x, y) in [-1, 1] over the plane, rendered small and smoothed up
+const heatCanvas = document.createElement('canvas');
+function heatmap(p, f, res = 64, k = 0.8) {
+  heatCanvas.width = res; heatCanvas.height = res;
+  const hc = heatCanvas.getContext('2d'), img = hc.createImageData(res, res);
+  for (let j = 0; j < res; j++) for (let i = 0; i < res; i++) {
+    const x = (i + 0.5) / res * 2 - 1, y = 1 - (j + 0.5) / res * 2, c = valColor(f(x, y), k), q = (j * res + i) * 4;
+    img.data[q] = c[0]; img.data[q + 1] = c[1]; img.data[q + 2] = c[2]; img.data[q + 3] = 255;
+  }
+  hc.putImageData(img, 0, 0);
+  const b = planeBox(p); p.ctx.imageSmoothingEnabled = true; p.ctx.drawImage(heatCanvas, b.x0, b.y0, b.s, b.s);
+  p.ctx.strokeStyle = C.line; p.ctx.lineWidth = 1; p.ctx.strokeRect(b.x0, b.y0, b.s, b.s);
+  return b;
+}
+function dots(p, b, pts, { hollow = false, r = 4.2 } = {}) {
+  const ctx = p.ctx;
+  for (const d of pts) {
+    const [x, y] = toPx(b, d.x, d.y);
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = d.c ? C.pos : C.neg; ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = hollow ? 1.6 : 1;
+    if (hollow) { ctx.globalAlpha = 0.9; ctx.stroke(); ctx.globalAlpha = 1; } else { ctx.fill(); ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1; }
+  }
+}
+// Line chart of one or more series
+function lineChart(p, series, { ymin = 0, ymax = null, label = 'loss', log = false } = {}) {
+  const ctx = p.ctx; p.clear();
+  const L = 34, R = 10, T = 10, B = 22, W = p.w - L - R, H = p.h - T - B;
+  // On a log scale, small late improvements stay visible next to the large starting error
+  if (log) series = series.map(s => ({ ...s, data: s.data.map(v => Math.log10(Math.max(v, 1e-4))) }));
+  const all = series.flatMap(s => s.data);
+  if (log) { ymin = Math.floor(Math.min(...all, 0)); ymax = Math.max(ymin + 1, Math.ceil(Math.max(...all))); }
+  const top = ymax ?? Math.max(0.05, ...all) * 1.08;
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(L, T); ctx.lineTo(L, T + H); ctx.lineTo(L + W, T + H); ctx.stroke();
+  ctx.fillStyle = C.muted; ctx.font = '10.5px "IBM Plex Mono", monospace';
+  ctx.fillText(log ? `1e${top}` : top.toFixed(2), 2, T + 8); ctx.fillText(log ? `1e${ymin}` : ymin.toFixed(0), 2, T + H);
+  ctx.fillText(label, L + 6, T + 10); ctx.fillText('training steps →', L + W - 104, T + H + 16);
+  for (const s of series) {
+    if (s.data.length < 2) continue;
+    ctx.strokeStyle = s.color; ctx.lineWidth = 2; ctx.beginPath();
+    s.data.forEach((v, i) => { const x = L + i / (s.data.length - 1) * W, y = T + H - clamp((v - ymin) / (top - ymin), 0, 1) * H; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+  }
+}
+const pushHist = (arr, v, max = 400) => { arr.push(v); if (arr.length > max) { for (let i = 0; i < arr.length / 2; i++) arr.splice(i, 1); } };
+
+// Network diagram with a small picture inside every neuron showing what it responds to over the plane
+function drawNetwork(p, net, { inputs = ['x₁', 'x₂'], feats = null, res = 18 } = {}) {
+  const ctx = p.ctx; p.clear();
+  const S = net.sizes, cols = S.length, pad = 26, colW = (p.w - pad * 2) / Math.max(1, cols - 1);
+  const maxN = Math.max(...S), cell = clamp(Math.min((p.h - 30) / maxN - 10, colW * 0.42, 54), 14, 54);
+  const pos = S.map((n, l) => Array.from({ length: n }, (_, i) => [pad + l * colW, p.h / 2 + (i - (n - 1) / 2) * (cell + 10)]));
+  // Edges
+  for (let l = 1; l < cols; l++) {
+    const ni = S[l - 1], W = net.W[l - 1], maxW = Math.max(0.5, ...Array.from(W, Math.abs));
+    for (let o = 0; o < S[l]; o++) for (let i = 0; i < ni; i++) {
+      const w = W[o * ni + i], [x1, y1] = pos[l - 1][i], [x2, y2] = pos[l][o];
+      ctx.strokeStyle = wColor(w); ctx.globalAlpha = clamp(0.15 + Math.abs(w) / maxW * 0.8, 0.1, 0.95);
+      ctx.lineWidth = clamp(Math.abs(w) / maxW * 4, 0.5, 4);
+      ctx.beginPath(); ctx.moveTo(x1 + cell / 2, y1); ctx.bezierCurveTo((x1 + x2) / 2, y1, (x1 + x2) / 2, y2, x2 - cell / 2, y2); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+  // Neuron pictures
+  const grids = S.map(n => Array.from({ length: n }, () => new Float64Array(res * res)));
+  for (let j = 0; j < res; j++) for (let i = 0; i < res; i++) {
+    const x = (i + 0.5) / res * 2 - 1, y = 1 - (j + 0.5) / res * 2, { A } = net.forward(feats ? feats(x, y) : [x, y]);
+    for (let l = 0; l < cols; l++) for (let k = 0; k < S[l]; k++) grids[l][k][j * res + i] = A[l][k];
+  }
+  heatCanvas.width = res; heatCanvas.height = res; const hc = heatCanvas.getContext('2d');
+  for (let l = 0; l < cols; l++) for (let k = 0; k < S[l]; k++) {
+    const g = grids[l][k], fnName = l === 0 ? 'in' : net.fn(l);
+    let scale = 1, shift = 0;
+    if (fnName === 'sigmoid') { scale = 2; shift = -1; }
+    else if (fnName === 'relu' || fnName === 'in' || fnName === 'linear') { const m = Math.max(1e-6, ...Array.from(g, Math.abs)); scale = 1 / m; }
+    const img = hc.createImageData(res, res);
+    for (let q = 0; q < g.length; q++) { const c = valColor(g[q] * scale + shift, 0.95); img.data[q * 4] = c[0]; img.data[q * 4 + 1] = c[1]; img.data[q * 4 + 2] = c[2]; img.data[q * 4 + 3] = 255; }
+    hc.putImageData(img, 0, 0);
+    const [cx, cy] = pos[l][k];
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(heatCanvas, cx - cell / 2, cy - cell / 2, cell, cell);
+    ctx.strokeStyle = l === cols - 1 ? C.accent : '#3a3e4e'; ctx.lineWidth = l === cols - 1 ? 2 : 1; ctx.strokeRect(cx - cell / 2, cy - cell / 2, cell, cell);
+  }
+  ctx.fillStyle = C.muted; ctx.font = '11px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
+  pos[0].forEach(([x, y], i) => ctx.fillText(inputs[i] || '', x, y + cell / 2 + 12));
+  ctx.fillText('input', pos[0][0][0], 14);
+  if (cols > 2) ctx.fillText(cols > 3 ? 'hidden layers' : 'hidden layer', (pos[1][0][0] + pos[cols - 2][0][0]) / 2, 14);
+  ctx.fillText('output', pos[cols - 1][0][0], 14);
+  ctx.textAlign = 'left';
+}
+
+// ======================================================================
+// Chapter 1. One neuron: multiply, add, squash
+// ======================================================================
+function chapterNeuron() {
+  const o = { x: 0.8, w: 1.5, b: -0.5, act: 'sigmoid' };
+  const dia = pane('The neuron', 1.35), plot = pane('Its output for every input x', 1.35);
+  const z = () => o.w * o.x + o.b, y = () => ACT[o.act].f(z());
+  const yRange = () => o.act === 'none' ? [-6, 6] : o.act === 'relu' ? [-1, 6] : [-0.3, 1.3].map((v, i) => o.act === 'tanh' ? [-1.3, 1.3][i] : v);
+  function node(ctx, x, y, r, fill, stroke, text, sub) {
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = C.fg; ctx.textAlign = 'center'; ctx.font = '600 14px "IBM Plex Mono", monospace'; ctx.fillText(text, x, y + 5);
+    if (sub) { ctx.fillStyle = C.muted; ctx.font = '11px "IBM Plex Sans", sans-serif'; ctx.fillText(sub, x, y + r + 16); }
+    ctx.textAlign = 'left';
+  }
+  function drawDia() {
+    const p = dia, ctx = p.ctx; p.clear();
+    const W = p.w, H = p.h, cy = H * 0.55, r = Math.min(28, W / 16);
+    const xs = [W * 0.1, W * 0.42, W * 0.66, W * 0.9];
+    // weight edge
+    ctx.strokeStyle = wColor(o.w); ctx.lineWidth = clamp(Math.abs(o.w) * 2, 1, 9);
+    ctx.beginPath(); ctx.moveTo(xs[0] + r, cy); ctx.lineTo(xs[1] - r, cy); ctx.stroke();
+    ctx.fillStyle = wColor(o.w); ctx.font = '600 13px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
+    ctx.fillText(`× w = ${o.w.toFixed(2)}`, (xs[0] + xs[1]) / 2, cy - 18);
+    // bias
+    ctx.strokeStyle = wColor(o.b); ctx.lineWidth = clamp(Math.abs(o.b) * 2, 1, 7);
+    ctx.beginPath(); ctx.moveTo(xs[1], cy - H * 0.3); ctx.lineTo(xs[1], cy - r); ctx.stroke();
+    ctx.fillStyle = wColor(o.b); ctx.fillText(`+ b = ${o.b.toFixed(2)}`, xs[1], cy - H * 0.3 - 8);
+    // to activation and output
+    ctx.strokeStyle = '#555a6c'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(xs[1] + r, cy); ctx.lineTo(xs[2] - r * 1.2, cy); ctx.moveTo(xs[2] + r * 1.2, cy); ctx.lineTo(xs[3] - r, cy); ctx.stroke();
+    node(ctx, xs[0], cy, r, '#1a1c25', C.muted, o.x.toFixed(2), 'input x');
+    node(ctx, xs[1], cy, r, '#1a1c25', C.accent, z().toFixed(2), 'sum: w·x + b');
+    // activation box with a mini curve
+    const bw = r * 2.4, bx = xs[2] - bw / 2, by = cy - r;
+    ctx.fillStyle = '#1a1c25'; ctx.fillRect(bx, by, bw, r * 2); ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, r * 2);
+    ctx.strokeStyle = C.fg; ctx.lineWidth = 1.5; ctx.beginPath();
+    const [lo, hi] = yRange();
+    for (let i = 0; i <= 40; i++) { const t = -5 + i / 4, v = ACT[o.act].f(t), px = bx + 4 + i / 40 * (bw - 8), py = by + r * 2 - 4 - clamp((v - lo) / (hi - lo), 0, 1) * (r * 2 - 8); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+    ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.font = '11px "IBM Plex Sans", sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(o.act === 'none' ? 'no squashing' : `${ACT[o.act].label}`, xs[2], cy + r + 16);
+    const yv = y(), oc = valColor(o.act === 'sigmoid' || o.act === 'step' ? yv * 2 - 1 : clamp(yv / 3, -1, 1), 0.9);
+    node(ctx, xs[3], cy, r, rgb(oc), C.fg, yv.toFixed(2), 'output y');
+    ctx.textAlign = 'left';
+  }
+  const PX = { L: 36, R: 12, T: 12, B: 26 };
+  const sx = x => PX.L + (x + 5) / 10 * (plot.w - PX.L - PX.R);
+  const sy = v => { const [lo, hi] = yRange(); return plot.h - PX.B - (v - lo) / (hi - lo) * (plot.h - PX.T - PX.B); };
+  function drawPlot() {
+    const p = plot, ctx = p.ctx; p.clear();
+    const [lo, hi] = yRange();
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.moveTo(sx(-5), sy(0)); ctx.lineTo(sx(5), sy(0)); ctx.moveTo(sx(0), sy(lo)); ctx.lineTo(sx(0), sy(hi)); ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.font = '10.5px "IBM Plex Mono", monospace';
+    for (const t of [-4, -2, 2, 4]) ctx.fillText(t, sx(t) - 5, sy(0) + 14);
+    ctx.fillText(hi.toFixed(1), 4, sy(hi) + 8); ctx.fillText(lo.toFixed(1), 4, sy(lo));
+    ctx.fillText('x →', p.w - 34, sy(0) - 6);
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 2.5; ctx.beginPath();
+    for (let i = 0; i <= 400; i++) { const x = -5 + i / 40, v = ACT[o.act].f(o.w * x + o.b), py = clamp(sy(v), -50, p.h + 50); i ? ctx.lineTo(sx(x), py) : ctx.moveTo(sx(x), py); }
+    ctx.stroke();
+    // where the sum crosses zero
+    if (Math.abs(o.w) > 1e-3) { const x0 = -o.b / o.w; if (x0 > -5 && x0 < 5) { ctx.setLineDash([3, 4]); ctx.strokeStyle = C.muted; ctx.beginPath(); ctx.moveTo(sx(x0), sy(lo)); ctx.lineTo(sx(x0), sy(hi)); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = C.muted; ctx.fillText('sum = 0', sx(x0) + 4, PX.T + 10); } }
+    // probe
+    const px = sx(o.x), py = sy(y());
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = '#ffffff88'; ctx.beginPath(); ctx.moveTo(px, sy(0)); ctx.lineTo(px, py); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
+  }
+  const redraw = () => { drawDia(); drawPlot(); status(`x = ${o.x.toFixed(2)}  →  sum = ${o.w.toFixed(2)} × ${o.x.toFixed(2)} + ${o.b.toFixed(2)} = ${z().toFixed(2)}  →  output = ${ACT[o.act].label}(${z().toFixed(2)}) = ${y().toFixed(3)}`); };
+  let xs;
+  drag(plot, (px, py, e, ph) => { if (ph === 'down' || ph === 'move') { o.x = clamp((px - PX.L) / (plot.w - PX.L - PX.R) * 10 - 5, -5, 5); xs?.set(+o.x.toFixed(2)); redraw(); } });
+  return {
+    redraw,
+    ui: () => [
+      (xs = slider({ id: 'x', label: 'Input x', min: -5, max: 5, step: 0.01, value: o.x, fmt: v => (+v).toFixed(2), oninput: v => { o.x = v; redraw(); } })),
+      slider({ id: 'w', label: 'Weight w', min: -4, max: 4, step: 0.01, value: o.w, fmt: v => (+v).toFixed(2), oninput: v => { o.w = v; redraw(); } }),
+      slider({ id: 'b', label: 'Bias b', min: -4, max: 4, step: 0.01, value: o.b, fmt: v => (+v).toFixed(2), oninput: v => { o.b = v; redraw(); } }),
+      seg({ label: 'Activation (the squash)', options: [['none', 'None'], ['step', 'Step'], ['sigmoid', 'Sigmoid'], ['tanh', 'tanh'], ['relu', 'ReLU']], value: o.act, onchange: v => { o.act = v; redraw(); } }),
+      h('p', { class: 'small' }, 'You can also drag along the right-hand graph to move the input.'),
+    ],
+  };
+}
+
+// ======================================================================
+// Chapter 2. Two inputs: a neuron draws a straight line
+// ======================================================================
+function chapterLine() {
+  const o = { w1: 1.4, w2: -0.6, b: 0.2, act: 'sigmoid', px: 0.35, py: 0.55, seed: 7 };
+  let data = makeData('blobs', 60, 0.05, o.seed);
+  const dia = pane('The neuron', 1.2), plane = pane('What it says about every point', 1);
+  const out = (x, y) => ACT[o.act].f(o.w1 * x + o.w2 * y + o.b);
+  function drawPlane() {
+    const p = plane, ctx = p.ctx; p.clear();
+    const b = heatmap(p, (x, y) => out(x, y) * 2 - 1, 64, 0.55);
+    // boundary: w1 x + w2 y + b = 0
+    ctx.save(); ctx.beginPath(); ctx.rect(b.x0, b.y0, b.s, b.s); ctx.clip();
+    if (Math.abs(o.w1) + Math.abs(o.w2) > 1e-3) {
+      const pts = Math.abs(o.w2) > Math.abs(o.w1) ? [-1.2, 1.2].map(x => [x, -(o.w1 * x + o.b) / o.w2]) : [-1.2, 1.2].map(y => [-(o.w2 * y + o.b) / o.w1, y]);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]); ctx.beginPath(); ctx.moveTo(...toPx(b, ...pts[0])); ctx.lineTo(...toPx(b, ...pts[1])); ctx.stroke(); ctx.setLineDash([]);
+      // weight vector arrow from the line's closest point to the origin
+      const n2 = o.w1 * o.w1 + o.w2 * o.w2, fx = -o.b * o.w1 / n2, fy = -o.b * o.w2 / n2, L = 0.28 / Math.sqrt(n2);
+      ctx.strokeStyle = C.accent; ctx.fillStyle = C.accent; ctx.lineWidth = 2;
+      const [ax, ay] = toPx(b, fx, fy), [bx, by] = toPx(b, fx + o.w1 * L, fy + o.w2 * L);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      const ang = Math.atan2(by - ay, bx - ax); ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - 9 * Math.cos(ang - 0.4), by - 9 * Math.sin(ang - 0.4)); ctx.lineTo(bx - 9 * Math.cos(ang + 0.4), by - 9 * Math.sin(ang + 0.4)); ctx.fill();
+    }
+    ctx.restore();
+    dots(p, b, data);
+    const [qx, qy] = toPx(b, o.px, o.py);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(qx, qy, 9, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(qx - 13, qy); ctx.lineTo(qx + 13, qy); ctx.moveTo(qx, qy - 13); ctx.lineTo(qx, qy + 13); ctx.stroke();
+  }
+  function drawDia() {
+    const p = dia, ctx = p.ctx; p.clear();
+    const W = p.w, H = p.h, r = Math.min(26, W / 17), ys = [H * 0.33, H * 0.72], cx = W * 0.5, cy = H * 0.52, ox = W * 0.86;
+    const ins = [[o.px, o.w1, 'x₁'], [o.py, o.w2, 'x₂']];
+    ins.forEach(([v, w, nm], i) => {
+      ctx.strokeStyle = wColor(w); ctx.lineWidth = clamp(Math.abs(w) * 2, 1, 9);
+      ctx.beginPath(); ctx.moveTo(W * 0.12 + r, ys[i]); ctx.lineTo(cx - r, cy); ctx.stroke();
+      ctx.fillStyle = wColor(w); ctx.font = '600 12.5px "IBM Plex Mono", monospace'; ctx.textAlign = 'center';
+      ctx.fillText(`× ${w.toFixed(2)}`, (W * 0.12 + cx) / 2, (ys[i] + cy) / 2 + (i ? 18 : -10));
+      ctx.beginPath(); ctx.arc(W * 0.12, ys[i], r, 0, Math.PI * 2); ctx.fillStyle = '#1a1c25'; ctx.fill(); ctx.strokeStyle = C.muted; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = C.fg; ctx.font = '600 13px "IBM Plex Mono", monospace'; ctx.fillText(v.toFixed(2), W * 0.12, ys[i] + 5);
+      ctx.fillStyle = C.muted; ctx.font = '11px "IBM Plex Sans", sans-serif'; ctx.fillText(nm, W * 0.12, ys[i] + r + 15);
+    });
+    ctx.strokeStyle = wColor(o.b); ctx.lineWidth = clamp(Math.abs(o.b) * 2, 1, 7); ctx.beginPath(); ctx.moveTo(cx, cy - H * 0.3); ctx.lineTo(cx, cy - r); ctx.stroke();
+    ctx.fillStyle = wColor(o.b); ctx.font = '600 12.5px "IBM Plex Mono", monospace'; ctx.fillText(`+ ${o.b.toFixed(2)}`, cx, cy - H * 0.3 - 7);
+    const zv = o.w1 * o.px + o.w2 * o.py + o.b, yv = ACT[o.act].f(zv);
+    ctx.strokeStyle = '#555a6c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx + r, cy); ctx.lineTo(ox - r, cy); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = '#1a1c25'; ctx.fill(); ctx.strokeStyle = C.accent; ctx.stroke();
+    ctx.fillStyle = C.fg; ctx.font = '600 13px "IBM Plex Mono", monospace'; ctx.fillText(zv.toFixed(2), cx, cy + 5);
+    ctx.fillStyle = C.muted; ctx.font = '11px "IBM Plex Sans", sans-serif'; ctx.fillText('sum', cx, cy + r + 15);
+    ctx.fillText(ACT[o.act].label, (cx + ox) / 2, cy - 8);
+    ctx.beginPath(); ctx.arc(ox, cy, r, 0, Math.PI * 2); ctx.fillStyle = rgb(valColor(yv * 2 - 1, 0.9)); ctx.fill(); ctx.strokeStyle = C.fg; ctx.stroke();
+    ctx.fillStyle = C.fg; ctx.font = '600 13px "IBM Plex Mono", monospace'; ctx.fillText(yv.toFixed(2), ox, cy + 5);
+    ctx.fillStyle = C.muted; ctx.font = '11px "IBM Plex Sans", sans-serif'; ctx.fillText(yv > 0.5 ? 'says blue' : 'says orange', ox, cy + r + 15);
+    ctx.textAlign = 'left';
+  }
+  const acc = () => data.filter(d => (out(d.x, d.y) > 0.5 ? 1 : 0) === d.c).length / data.length;
+  const redraw = () => { drawPlane(); drawDia(); status(`the dashed line is where w₁x₁ + w₂x₂ + b = 0 · the purple arrow is the direction (w₁, w₂) · dots sorted correctly: ${Math.round(acc() * 100)}%`); };
+  drag(plane, (px, py, e, ph) => { if (ph === 'down' || ph === 'move') { const b = planeBox(plane); [o.px, o.py] = fromPx(b, px, py).map(v => clamp(v, -1, 1)); redraw(); } });
+  const sliders = {};
+  return {
+    redraw,
+    ui: () => [
+      (sliders.w1 = slider({ id: 'w1', label: 'Weight w₁', min: -4, max: 4, step: 0.01, value: o.w1, fmt: v => (+v).toFixed(2), oninput: v => { o.w1 = v; redraw(); } })),
+      (sliders.w2 = slider({ id: 'w2', label: 'Weight w₂', min: -4, max: 4, step: 0.01, value: o.w2, fmt: v => (+v).toFixed(2), oninput: v => { o.w2 = v; redraw(); } })),
+      (sliders.b = slider({ id: 'b2', label: 'Bias b', min: -3, max: 3, step: 0.01, value: o.b, fmt: v => (+v).toFixed(2), oninput: v => { o.b = v; redraw(); } })),
+      seg({ label: 'Activation', options: [['step', 'Step'], ['sigmoid', 'Sigmoid']], value: o.act, onchange: v => { o.act = v; redraw(); } }),
+      buttons([['New dots', () => { o.seed++; data = makeData('blobs', 60, 0.05, o.seed); redraw(); }], ['Show me a good answer', () => { Object.assign(o, { w1: 3, w2: 3, b: 0 }); for (const k of ['w1', 'w2', 'b']) sliders[k].set(o[k]); redraw(); }]]),
+      h('p', { class: 'small' }, 'Drag the crosshair on the right to feed the neuron any point and watch the numbers.'),
+    ],
+  };
+}
+
+// ======================================================================
+// Chapter 3. Learning: rolling downhill on the error surface
+// ======================================================================
+function chapterLearn() {
+  const o = { lr: 1, playing: false, add: 1, seed: 3, speed: 12 };
+  let data = makeData('blobs', 50, 0.12, o.seed);
+  let w1, w2, b, path, hist, acc = 0, land = null, landB = null, landDirty = true;
+  const sig = z => 1 / (1 + Math.exp(-z));
+  const lossAt = (a1, a2, bb) => { let L = 0; for (const d of data) { const p = sig(a1 * d.x + a2 * d.y + bb); L -= d.c ? Math.log(p + 1e-9) : Math.log(1 - p + 1e-9); } return L / data.length; };
+  const reset = (s1 = -4.5, s2 = 3.5, sb = 0) => { w1 = s1; w2 = s2; b = sb; path = [[w1, w2]]; hist = [lossAt(w1, w2, b)]; landDirty = true; };
+  reset();
+  function step() {
+    let g1 = 0, g2 = 0, gb = 0;
+    for (const d of data) { const e = sig(w1 * d.x + w2 * d.y + b) - d.c; g1 += e * d.x; g2 += e * d.y; gb += e; }
+    const n = data.length; w1 -= o.lr * g1 / n; w2 -= o.lr * g2 / n; b -= o.lr * gb / n;
+    w1 = clamp(w1, -40, 40); w2 = clamp(w2, -40, 40); b = clamp(b, -40, 40);
+    path.push([w1, w2]); if (path.length > 2000) path.shift();
+    pushHist(hist, lossAt(w1, w2, b));
+    acc = data.filter(d => (sig(w1 * d.x + w2 * d.y + b) > 0.5 ? 1 : 0) === d.c).length / n;
+  }
+  const plane = pane('The neuron’s line, as it learns', 1), lands = pane('The error surface: error for every (w₁, w₂)', 1), chart = pane('Error over time', 2.2, { wide: true });
+  const WR = 9;   // landscape shows w in [-WR, WR]
+  function drawPlane() {
+    const p = plane, ctx = p.ctx; p.clear();
+    const bx = heatmap(p, (x, y) => sig(w1 * x + w2 * y + b) * 2 - 1, 56, 0.55);
+    dots(p, bx, data);
+  }
+  const landCanvas = document.createElement('canvas');
+  function buildLand() {
+    const R = 70; landCanvas.width = R; landCanvas.height = R; const lc = landCanvas.getContext('2d'), img = lc.createImageData(R, R);
+    const vals = new Float64Array(R * R); let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j < R; j++) for (let i = 0; i < R; i++) { const a1 = (i + 0.5) / R * 2 * WR - WR, a2 = WR - (j + 0.5) / R * 2 * WR, L = Math.log(lossAt(a1, a2, b) + 0.02); vals[j * R + i] = L; lo = Math.min(lo, L); hi = Math.max(hi, L); }
+    for (let q = 0; q < vals.length; q++) {
+      const t = (vals[q] - lo) / (hi - lo), band = (Math.floor(t * 14) % 2) * 0.06;
+      const k = 1 - t;   // bright = low error
+      img.data[q * 4] = 30 + 200 * k * k + band * 255; img.data[q * 4 + 1] = 22 + 170 * k * k * k + band * 200; img.data[q * 4 + 2] = 60 + 190 * k + band * 255; img.data[q * 4 + 3] = 255;
+    }
+    lc.putImageData(img, 0, 0); landB = b; landDirty = false;
+  }
+  function drawLand() {
+    const p = lands, ctx = p.ctx; p.clear();
+    if (landDirty || Math.abs(landB - b) > 0.25) buildLand();
+    const bx = planeBox(p, 22);
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(landCanvas, bx.x0, bx.y0, bx.s, bx.s);
+    const toL = (a1, a2) => [bx.x0 + (a1 + WR) / (2 * WR) * bx.s, bx.y0 + (WR - a2) / (2 * WR) * bx.s];
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.beginPath(); path.forEach((q, i) => { const [x, y] = toL(clamp(q[0], -WR, WR), clamp(q[1], -WR, WR)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
+    const [cx, cy] = toL(clamp(w1, -WR, WR), clamp(w2, -WR, WR));
+    ctx.fillStyle = C.neg; ctx.beginPath(); ctx.arc(cx, cy, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.font = '10.5px "IBM Plex Mono", monospace';
+    ctx.fillText('w₁ →', bx.x0 + bx.s - 30, bx.y0 + bx.s + 15); ctx.fillText('w₂ ↑', bx.x0 - 20, bx.y0 - 8);
+    ctx.fillText('bright = small error', bx.x0, bx.y0 + bx.s + 15);
+  }
+  const redraw = () => {
+    drawPlane(); drawLand(); lineChart(chart, [{ data: hist, color: C.accent }], { label: 'error (cross-entropy)' });
+    status(`step ${hist.length - 1} · w₁ = ${w1.toFixed(2)}, w₂ = ${w2.toFixed(2)}, b = ${b.toFixed(2)} · error ${hist[hist.length - 1].toFixed(3)} · correct ${Math.round(acc * 100)}%${o.playing ? '' : ' · paused'}`);
+  };
+  drag(lands, (px, py, e, ph) => { if (ph !== 'down') return; const bx = planeBox(lands, 22); const a1 = (px - bx.x0) / bx.s * 2 * WR - WR, a2 = WR - (py - bx.y0) / bx.s * 2 * WR; if (Math.abs(a1) <= WR && Math.abs(a2) <= WR) { reset(a1, a2, b); redraw(); } });
+  drag(plane, (px, py, e, ph) => { if (ph !== 'down') return; const bx = planeBox(plane); const [x, y] = fromPx(bx, px, py); if (Math.abs(x) <= 1 && Math.abs(y) <= 1) { data.push({ x, y, c: e.shiftKey ? 1 - o.add : o.add }); landDirty = true; hist.push(lossAt(w1, w2, b)); redraw(); } });
+  let acc_t = 0, playBtn;
+  const setPlay = v => { o.playing = v; if (playBtn) playBtn.textContent = v ? 'Pause' : 'Play'; };
+  return {
+    redraw,
+    tick(dt) { if (!o.playing) return; acc_t += dt * o.speed; let n = 0; while (acc_t >= 1 && n < 50) { step(); acc_t -= 1; n++; } if (n) redraw(); },
+    ui: () => {
+      const bt = buttons([['Play', () => setPlay(!o.playing), true, 'play'], ['One step', () => { step(); redraw(); }], ['Start somewhere random', () => { const r = Math.random; reset(r() * 16 - 8, r() * 16 - 8, r() * 2 - 1); redraw(); }]]);
+      playBtn = bt.querySelector('#play'); setPlay(o.playing);
+      return [
+        bt,
+        slider({ id: 'lr', label: 'Learning rate (step size)', min: -2, max: 1.6, step: 0.01, value: Math.log10(o.lr), fmt: v => (10 ** v).toFixed(2), oninput: v => { o.lr = 10 ** v; } }),
+        slider({ id: 'spd', label: 'Steps per second', min: 1, max: 60, step: 1, value: o.speed, fmt: v => `${v}`, oninput: v => { o.speed = v; } }),
+        seg({ label: 'Clicking the dots chart adds', options: [[1, 'Blue dots'], [0, 'Orange dots']], value: o.add, onchange: v => { o.add = +v; } }),
+        buttons([['New dots', () => { o.seed++; data = makeData('blobs', 50, 0.12, o.seed); reset(w1, w2, b); redraw(); }]]),
+        h('p', { class: 'small' }, 'Click anywhere on the error surface to start the neuron from those weights. Click the dots chart to add a dot; hold Shift for the other color.'),
+      ];
+    },
+  };
+}
+
+// ======================================================================
+// Chapter 4. One line isn't enough: add a hidden layer
+// ======================================================================
+function chapterHidden() {
+  const o = { data: 'xor', hidden: 3, act: 'tanh', lr: 0.03, playing: true, seed: 11 };
+  let data, net, hist, frame = 0;
+  const X = () => data.map(d => [d.x, d.y]), Y = () => data.map(d => d.c);
+  const rebuild = () => { data = makeData(o.data, 120, 0.05, o.seed); net = new MLP(o.hidden ? [2, o.hidden, 1] : [2, 1], o.act, 'sigmoid', o.seed * 7 + o.hidden); hist = []; };
+  rebuild();
+  const plane = pane('What the whole network says', 1), dia = pane('Inside: each square shows what one neuron responds to', 1.25), chart = pane('Error over time', 2.4, { wide: true });
+  const acc = () => data.filter(d => (net.predict([d.x, d.y]) > 0.5 ? 1 : 0) === d.c).length / data.length;
+  const redraw = () => {
+    plane.clear(); const b = heatmap(plane, (x, y) => net.predict([x, y]) * 2 - 1, 56, 0.6); dots(plane, b, data);
+    drawNetwork(dia, net);
+    lineChart(chart, [{ data: hist, color: C.accent }], { label: 'error' });
+    status(`${o.hidden ? `${o.hidden} hidden neuron${o.hidden > 1 ? 's' : ''}` : 'no hidden layer: just one neuron'} · step ${net.steps} · correct ${Math.round(acc() * 100)}%${o.playing ? '' : ' · paused'}`);
+  };
+  let playBtn; const setPlay = v => { o.playing = v; if (playBtn) playBtn.textContent = v ? 'Pause' : 'Play'; };
+  return {
+    redraw,
+    tick() { if (!o.playing) return; let L = 0; for (let i = 0; i < 4; i++) L = net.train(X(), Y(), o.lr); pushHist(hist, L); if (++frame % 2 === 0) redraw(); },
+    ui: () => {
+      const bt = buttons([['Pause', () => setPlay(!o.playing), true, 'play'], ['Start over', () => { o.seed++; net = new MLP(o.hidden ? [2, o.hidden, 1] : [2, 1], o.act, 'sigmoid', o.seed * 7); hist = []; redraw(); }]]);
+      playBtn = bt.querySelector('#play'); setPlay(o.playing);
+      return [
+        seg({ label: 'Dots', options: [['blobs', 'Two blobs'], ['xor', 'XOR'], ['circle', 'Circle']], value: o.data, onchange: v => { o.data = v; rebuild(); redraw(); } }),
+        slider({ id: 'hid', label: 'Hidden neurons', min: 0, max: 8, step: 1, value: o.hidden, fmt: v => +v === 0 ? 'none' : `${v}`, oninput: v => { o.hidden = v; rebuild(); redraw(); } }),
+        seg({ label: 'Hidden activation', options: [['tanh', 'tanh'], ['relu', 'ReLU'], ['sigmoid', 'Sigmoid']], value: o.act, onchange: v => { o.act = v; rebuild(); redraw(); } }),
+        slider({ id: 'lr4', label: 'Learning rate', min: -3, max: -0.5, step: 0.01, value: Math.log10(o.lr), fmt: v => (10 ** v).toFixed(3), oninput: v => { o.lr = 10 ** v; } }),
+        bt,
+        h('div', { class: 'legend' }, h('span', {}, h('i', { style: `background:${C.pos}` }), 'positive'), h('span', {}, h('i', { style: `background:${C.neg}` }), 'negative')),
+        h('p', { class: 'small' }, 'Lines between neurons are weights: blue positive, orange negative, thicker means larger.'),
+      ];
+    },
+  };
+}
+
+// ======================================================================
+// Chapter 5. Building any curve out of bent lines
+// ======================================================================
+function chapterCurves() {
+  const o = { target: 'wave', hidden: 8, act: 'relu', lr: 0.02, pieces: true, playing: true, seed: 5 };
+  const N = 64, xs = Array.from({ length: N }, (_, i) => -1 + 2 * i / (N - 1));
+  const TARGETS = { wave: x => 0.75 * Math.sin(3.2 * x), step: x => x > 0.1 ? 0.65 : -0.55, bump: x => 1.3 * Math.exp(-x * x / 0.06) - 0.5, vee: x => 1.5 * Math.abs(x) - 0.75 };
+  let ys = xs.map(TARGETS.wave), net, hist, frame = 0;
+  const rebuild = () => { net = new MLP([1, o.hidden, 1], o.act, 'linear', o.seed + o.hidden * 13); hist = []; };
+  rebuild();
+  const plot = pane('Target (dots) and the network’s curve (purple)', 1.7, { wide: true }), chart = pane('Error over time', 2.4, { wide: true });
+  const P = { L: 30, R: 12, T: 12, B: 24 }, YR = 1.5;
+  const sx = x => P.L + (x + 1) / 2 * (plot.w - P.L - P.R), sy = y => P.T + (YR - y) / (2 * YR) * (plot.h - P.T - P.B);
+  const inv = (px, py) => [(px - P.L) / (plot.w - P.L - P.R) * 2 - 1, YR - (py - P.T) / (plot.h - P.T - P.B) * 2 * YR];
+  function drawPlot() {
+    const p = plot, ctx = p.ctx; p.clear();
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sx(-1), sy(0)); ctx.lineTo(sx(1), sy(0)); ctx.moveTo(sx(0), sy(-YR)); ctx.lineTo(sx(0), sy(YR)); ctx.stroke();
+    // Each hidden neuron's contribution: output weight × activation
+    const H = o.hidden, W1 = net.W[0], B1 = net.B[0], W2 = net.W[1], B2 = net.B[1][0];
+    if (o.pieces) for (let j = 0; j < H; j++) {
+      ctx.strokeStyle = wColor(W2[j]); ctx.globalAlpha = 0.55; ctx.lineWidth = 1.3; ctx.beginPath();
+      for (let i = 0; i <= 120; i++) { const x = -1 + i / 60, v = W2[j] * ACT[o.act].f(W1[j] * x + B1[j]); const py = clamp(sy(v), -20, p.h + 20); i ? ctx.lineTo(sx(x), py) : ctx.moveTo(sx(x), py); }
+      ctx.stroke();
+      // the bend point of a ReLU piece
+      if (o.act === 'relu' && Math.abs(W1[j]) > 1e-6) { const xb = -B1[j] / W1[j]; if (xb > -1 && xb < 1) { ctx.globalAlpha = 0.9; ctx.fillStyle = wColor(W2[j]); ctx.beginPath(); ctx.arc(sx(xb), sy(0), 3, 0, Math.PI * 2); ctx.fill(); } }
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff'; for (let i = 0; i < N; i++) { ctx.beginPath(); ctx.arc(sx(xs[i]), sy(ys[i]), 2.6, 0, Math.PI * 2); ctx.fill(); }
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 3; ctx.beginPath();
+    for (let i = 0; i <= 200; i++) { const x = -1 + i / 100, v = net.predict([x]); i ? ctx.lineTo(sx(x), sy(v)) : ctx.moveTo(sx(x), sy(v)); }
+    ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.font = '10.5px "IBM Plex Mono", monospace';
+    ctx.fillText(o.target === 'draw' ? 'drag on this chart to draw your own target' : '', P.L + 6, P.T + 12);
+  }
+  const redraw = () => {
+    drawPlot(); lineChart(chart, [{ data: hist, color: C.accent }], { label: 'error (log scale)', log: true });
+    status(`${o.hidden} hidden neurons (${ACT[o.act].label}) · step ${net.steps} · error ${(hist[hist.length - 1] ?? 0).toFixed(4)} · the purple curve is the sum of the thin pieces plus one constant${o.playing ? '' : ' · paused'}`);
+  };
+  let last = null;
+  drag(plot, (px, py, e, ph) => {
+    if (o.target !== 'draw') return;
+    if (ph === 'up' || ph === 'leave' || ph === 'hover') { last = null; return; }
+    const [x, y] = inv(px, py), yy = clamp(y, -YR + 0.05, YR - 0.05), i = Math.round((clamp(x, -1, 1) + 1) / 2 * (N - 1));
+    if (last) { const [i0, y0] = last, lo = Math.min(i0, i), hi = Math.max(i0, i); for (let k = lo; k <= hi; k++) ys[k] = hi === lo ? yy : lerp(y0, yy, (k - i0) / (i - i0)); } else ys[i] = yy;
+    last = [i, yy]; redraw();
+  });
+  let playBtn; const setPlay = v => { o.playing = v; if (playBtn) playBtn.textContent = v ? 'Pause' : 'Play'; };
+  return {
+    redraw,
+    tick() { if (!o.playing) return; let L = 0; const X = xs.map(x => [x]); for (let i = 0; i < 10; i++) L = net.train(X, ys, o.lr); pushHist(hist, L); if (++frame % 2 === 0) redraw(); },
+    ui: () => {
+      const bt = buttons([['Pause', () => setPlay(!o.playing), true, 'play'], ['Start over', () => { o.seed++; rebuild(); redraw(); }]]);
+      playBtn = bt.querySelector('#play'); setPlay(o.playing);
+      return [
+        seg({ label: 'Target curve', options: [['wave', 'Wave'], ['step', 'Step'], ['bump', 'Bump'], ['vee', 'V'], ['draw', 'Draw your own']], value: o.target, onchange: v => { o.target = v; if (v !== 'draw') ys = xs.map(TARGETS[v]); rebuild(); redraw(); } }),
+        slider({ id: 'h5', label: 'Hidden neurons', min: 1, max: 24, step: 1, value: o.hidden, fmt: v => `${v}`, oninput: v => { o.hidden = v; rebuild(); redraw(); } }),
+        seg({ label: 'Activation', options: [['relu', 'ReLU'], ['tanh', 'tanh'], ['sigmoid', 'Sigmoid']], value: o.act, onchange: v => { o.act = v; rebuild(); redraw(); } }),
+        check({ id: 'pieces', label: 'Show each neuron’s piece', checked: o.pieces, onchange: v => { o.pieces = v; redraw(); } }),
+        slider({ id: 'lr5', label: 'Learning rate', min: -3, max: -0.7, step: 0.01, value: Math.log10(o.lr), fmt: v => (10 ** v).toFixed(3), oninput: v => { o.lr = 10 ** v; } }),
+        bt,
+      ];
+    },
+  };
+}
+
+// ======================================================================
+// Chapter 6. The playground: stack layers and watch it learn
+// ======================================================================
+function chapterPlayground() {
+  const o = { data: 'spiral', noise: 0.05, layers: 2, width: 6, act: 'tanh', lr: 0.02, feats: false, test: true, playing: true, seed: 21 };
+  let train, test, net, histTr, histTe, frame = 0;
+  const featFn = (x, y) => o.feats ? [x, y, x * x, y * y, x * y] : [x, y];
+  const rebuildNet = () => { net = new MLP([o.feats ? 5 : 2, ...Array(o.layers).fill(o.width), 1], o.act, 'sigmoid', o.seed); histTr = []; histTe = []; };
+  const rebuildData = () => { const all = makeData(o.data, 400, o.noise, o.seed * 3 + 1); train = all.filter((_, i) => i % 10 < 7); test = all.filter((_, i) => i % 10 >= 7); };
+  rebuildData(); rebuildNet();
+  const dia = pane('The network', 1.5, { wide: true }), plane = pane('Its answer for every point', 1), chart = pane('Error: training (purple) and unseen test dots (white)', 1.3);
+  const lossOn = pts => { let L = 0; for (const d of pts) { const p = net.predict(featFn(d.x, d.y)); L -= d.c ? Math.log(p + 1e-9) : Math.log(1 - p + 1e-9); } return L / pts.length; };
+  const accOn = pts => pts.filter(d => (net.predict(featFn(d.x, d.y)) > 0.5 ? 1 : 0) === d.c).length / pts.length;
+  const redraw = () => {
+    plane.clear(); const b = heatmap(plane, (x, y) => net.predict(featFn(x, y)) * 2 - 1, 60, 0.6);
+    dots(plane, b, train); if (o.test) dots(plane, b, test, { hollow: true });
+    drawNetwork(dia, net, { inputs: o.feats ? ['x₁', 'x₂', 'x₁²', 'x₂²', 'x₁x₂'] : ['x₁', 'x₂'], feats: featFn, res: 16 });
+    lineChart(chart, [{ data: histTr, color: C.accent }, { data: histTe, color: '#ffffff' }], { label: 'error (log scale)', log: true });
+    status(`${o.layers} hidden layer${o.layers === 1 ? '' : 's'} × ${o.width} neurons · step ${net.steps} · training error ${(histTr[histTr.length - 1] ?? 0).toFixed(3)} · test error ${(histTe[histTe.length - 1] ?? 0).toFixed(3)} · test dots correct ${Math.round(accOn(test) * 100)}%${o.playing ? '' : ' · paused'}`);
+  };
+  let playBtn; const setPlay = v => { o.playing = v; if (playBtn) playBtn.textContent = v ? 'Pause' : 'Play'; };
+  return {
+    redraw,
+    tick() {
+      if (!o.playing) return;
+      const X = train.map(d => featFn(d.x, d.y)), Y = train.map(d => d.c);
+      let L = 0; for (let i = 0; i < 3; i++) L = net.train(X, Y, o.lr);
+      pushHist(histTr, L); pushHist(histTe, lossOn(test));
+      if (++frame % 3 === 0) redraw();
+    },
+    ui: () => {
+      const bt = buttons([['Pause', () => setPlay(!o.playing), true, 'play'], ['New starting weights', () => { o.seed++; rebuildNet(); redraw(); }], ['New dots', () => { o.seed++; rebuildData(); rebuildNet(); redraw(); }]]);
+      playBtn = bt.querySelector('#play'); setPlay(o.playing);
+      return [
+        seg({ label: 'Dots', options: DATASETS, value: o.data, onchange: v => { o.data = v; rebuildData(); rebuildNet(); redraw(); } }),
+        slider({ id: 'noise', label: 'Noise', min: 0, max: 0.5, step: 0.01, value: o.noise, fmt: v => (+v).toFixed(2), oninput: v => { o.noise = v; rebuildData(); rebuildNet(); redraw(); } }),
+        slider({ id: 'layers', label: 'Hidden layers', min: 0, max: 4, step: 1, value: o.layers, fmt: v => `${v}`, oninput: v => { o.layers = v; rebuildNet(); redraw(); } }),
+        slider({ id: 'width', label: 'Neurons per layer', min: 1, max: 8, step: 1, value: o.width, fmt: v => `${v}`, oninput: v => { o.width = v; rebuildNet(); redraw(); } }),
+        seg({ label: 'Activation', options: [['tanh', 'tanh'], ['relu', 'ReLU'], ['sigmoid', 'Sigmoid'], ['linear', 'None']], value: o.act, onchange: v => { o.act = v; rebuildNet(); redraw(); } }),
+        slider({ id: 'lr6', label: 'Learning rate', min: -3, max: -0.5, step: 0.01, value: Math.log10(o.lr), fmt: v => (10 ** v).toFixed(3), oninput: v => { o.lr = 10 ** v; } }),
+        check({ id: 'feats', label: 'Give it extra inputs: x₁², x₂², x₁x₂', checked: o.feats, onchange: v => { o.feats = v; rebuildNet(); redraw(); } }),
+        check({ id: 'test', label: 'Show the unseen test dots (hollow)', checked: o.test, onchange: v => { o.test = v; redraw(); } }),
+        bt,
+      ];
+    },
+  };
+}
+
+// ======================================================================
+// Chapter 7. Convolution: how image networks look for edges
+// ======================================================================
+function chapterConv() {
+  const N = 26, M = N - 2, P = M / 2;
+  const KERNELS = {
+    'Vertical edges': [-1, 0, 1, -2, 0, 2, -1, 0, 1],
+    'Horizontal edges': [-1, -2, -1, 0, 0, 0, 1, 2, 1],
+    'Outline': [-1, -1, -1, -1, 8, -1, -1, -1, -1],
+    'Blur': [1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9],
+    'Sharpen': [0, -1, 0, -1, 5, -1, 0, -1, 0],
+    'Diagonal': [2, -1, -1, -1, 2, -1, -1, -1, 2],
+  };
+  let K = KERNELS['Vertical edges'].slice(), img = new Float64Array(N * N), hover = null, anim = { on: false, k: 0 };
+  function sample(kind) {
+    img.fill(0);
+    const line = (x0, y0, x1, y1, w = 1.4) => { for (let t = 0; t <= 1; t += 0.005) { const x = lerp(x0, x1, t), y = lerp(y0, y1, t); paint(x, y, w); } };
+    if (kind === 'seven') { line(6, 6, 20, 6); line(20, 6, 11, 21); line(9, 13, 17, 13, 1); }
+    else if (kind === 'ring') { for (let a = 0; a < Math.PI * 2; a += 0.01) paint(13 + 7 * Math.cos(a), 13 + 7 * Math.sin(a), 1.4); }
+    else if (kind === 'house') { line(6, 12, 13, 5); line(13, 5, 20, 12); line(7, 12, 7, 21); line(19, 12, 19, 21); line(7, 21, 19, 21); }
+  }
+  function paint(cx, cy, r = 1.3, v = 1) {
+    for (let y = Math.floor(cy - r - 1); y <= cy + r + 1; y++) for (let x = Math.floor(cx - r - 1); x <= cx + r + 1; x++) {
+      if (x < 0 || y < 0 || x >= N || y >= N) continue;
+      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy), a = clamp(r + 0.5 - d, 0, 1) * v;
+      img[y * N + x] = v > 0 ? Math.max(img[y * N + x], a) : Math.min(img[y * N + x], 1 + v * clamp(r + 0.5 - d, 0, 1));
+    }
+  }
+  sample('seven');
+  const conv = () => { const f = new Float64Array(M * M); for (let y = 0; y < M; y++) for (let x = 0; x < M; x++) { let s = 0; for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) s += img[(y + j) * N + x + i] * K[j * 3 + i]; f[y * M + x] = s; } return f; };
+  const relu = f => f.map(v => Math.max(0, v));
+  const pool = f => { const p = new Float64Array(P * P); for (let y = 0; y < P; y++) for (let x = 0; x < P; x++) p[y * P + x] = Math.max(f[2 * y * M + 2 * x], f[2 * y * M + 2 * x + 1], f[(2 * y + 1) * M + 2 * x], f[(2 * y + 1) * M + 2 * x + 1]); return p; };
+  const input = pane('Your drawing (drag to paint, Shift to erase)', 1), fmap = pane('Filter applied everywhere (feature map)', 1), relup = pane('After ReLU: keep only the positive parts', 1), poolp = pane('After 2×2 max pooling: smaller, keeps the strongest', 1);
+  function grid(p, arr, n, { signed = false, reveal = Infinity, box = null, hl = null } = {}) {
+    const ctx = p.ctx; p.clear();
+    const b = planeBox(p, 6), cs = b.s / n, m = signed ? Math.max(1e-6, ...Array.from(arr, Math.abs)) : Math.max(1e-6, ...arr);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const q = y * n + x; if (q > reveal) { ctx.fillStyle = '#16171e'; } else if (signed) ctx.fillStyle = rgb(valColor(arr[q] / m, 0.95)); else { const g = arr[q] / m; ctx.fillStyle = rgb([lerp(15, 240, g), lerp(16, 236, g), lerp(21, 250, g)]); }
+      ctx.fillRect(b.x0 + x * cs, b.y0 + y * cs, cs - (n < 30 ? 0.6 : 0), cs - (n < 30 ? 0.6 : 0));
+    }
+    if (box) { ctx.strokeStyle = C.accent; ctx.lineWidth = 2.5; ctx.strokeRect(b.x0 + box[0] * cs, b.y0 + box[1] * cs, box[2] * cs, box[2] * cs); }
+    if (hl) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(b.x0 + hl[0] * cs, b.y0 + hl[1] * cs, cs, cs); }
+    return b;
+  }
+  let f, r, pl;
+  const redraw = () => {
+    f = conv(); r = relu(f); pl = pool(r);
+    const cur = anim.on ? [anim.k % M, Math.floor(anim.k / M)] : hover;
+    grid(input, img, N, { box: cur ? [cur[0], cur[1], 3] : null });
+    grid(fmap, f, M, { signed: true, reveal: anim.on ? anim.k : Infinity, hl: cur });
+    grid(relup, r, M, { reveal: anim.on ? anim.k : Infinity, hl: cur });
+    grid(poolp, pl, P, { reveal: anim.on ? Math.floor(Math.floor(anim.k / M) / 2) * P + Math.floor((anim.k % M) / 2) : Infinity, hl: cur ? [Math.floor(cur[0] / 2), Math.floor(cur[1] / 2)] : null });
+    if (cur) {
+      const [x, y] = cur, terms = [];
+      for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) if (Math.abs(K[j * 3 + i]) > 1e-9 && img[(y + j) * N + x + i] > 0.01) terms.push(`${(+K[j * 3 + i].toFixed(2))}×${img[(y + j) * N + x + i].toFixed(1)}`);
+      const v = Math.abs(f[y * M + x]) < 0.005 ? 0 : f[y * M + x];
+      status(`filter at column ${x + 1}, row ${y + 1}: ${terms.length ? terms.join(' + ') : 'nothing under the filter'} = ${v.toFixed(2)}${v < 0 ? ' → ReLU makes it 0' : ''}`);
+    } else status('hover over the feature map to see the 9 multiplications behind any square, or press Animate to watch the filter slide');
+  };
+  let erasing = false;
+  drag(input, (px, py, e, ph) => {
+    if (ph === 'hover' || ph === 'leave' || ph === 'up') return;
+    const b = planeBox(input, 6), x = (px - b.x0) / b.s * N, y = (py - b.y0) / b.s * N;
+    if (ph === 'down') erasing = e.shiftKey || e.button === 2;
+    paint(x, y, 1.2, erasing ? -1 : 1); redraw();
+  });
+  input.c.addEventListener('contextmenu', e => e.preventDefault());
+  for (const p of [fmap, relup]) drag(p, (px, py, e, ph) => {
+    if (ph === 'leave') { hover = null; redraw(); return; }
+    const b = planeBox(p, 6), x = Math.floor((px - b.x0) / b.s * M), y = Math.floor((py - b.y0) / b.s * M);
+    hover = x >= 0 && y >= 0 && x < M && y < M ? [x, y] : null; redraw();
+  });
+  let inputs = [], animBtn;
+  const setK = k => { K = k.slice(); inputs.forEach((inp, i) => { inp.value = +K[i].toFixed(3); }); redraw(); };
+  return {
+    redraw,
+    tick(dt) { if (!anim.on) return; anim.k += Math.max(1, Math.round(dt * 160)); if (anim.k >= M * M + 40) { anim.on = false; if (animBtn) animBtn.textContent = 'Animate the sliding filter'; } redraw(); },
+    ui: () => {
+      inputs = K.map((v, i) => h('input', { type: 'number', step: 0.5, value: +v.toFixed(3), 'aria-label': `Filter weight row ${Math.floor(i / 3) + 1} column ${i % 3 + 1}`, oninput: e => { K[i] = parseFloat(e.target.value) || 0; redraw(); } }));
+      const ab = buttons([['Animate the sliding filter', () => { anim = { on: true, k: 0 }; animBtn.textContent = 'Animating…'; }, true, 'anim']]);
+      animBtn = ab.querySelector('#anim');
+      return [
+        h('h4', {}, 'The filter: 9 weights, edit any of them'),
+        h('div', { class: 'kernel' }, inputs),
+        buttons(Object.entries(KERNELS).map(([n, k]) => [n, () => setK(k)])),
+        ab,
+        h('h4', {}, 'Drawing'),
+        buttons([['Seven', () => { sample('seven'); redraw(); }], ['Ring', () => { sample('ring'); redraw(); }], ['House', () => { sample('house'); redraw(); }], ['Clear', () => { img.fill(0); redraw(); }]]),
+        h('p', { class: 'small' }, 'In the feature map, blue means the filter matched and orange means the opposite pattern. Right-click or hold Shift to erase.'),
+      ];
+    },
+  };
+}
+
+// ======================================================================
+// Chapters and app shell
+// ======================================================================
+const CHAPTERS = [
+  { id: 'neuron', name: 'One neuron', sub: 'Multiply, add, squash', make: chapterNeuron,
+    what: 'A neuron takes a number, multiplies it by a weight, adds a bias, and passes the result through an activation function that squashes or bends it. That’s all. The weight sets how steep the response is and which way it faces; the bias slides it left or right.',
+    tip: 'Set the activation to Step and drag the bias: the neuron becomes a switch that flips at a point you choose.' },
+  { id: 'line', name: 'A neuron draws a line', sub: 'Two inputs, one decision', make: chapterLine,
+    what: 'With two inputs, the neuron looks at a point (x₁, x₂). The weights and bias define a straight line across the plane: on one side the sum is positive and the neuron says blue, on the other it says orange. Changing the weights turns the line; changing the bias slides it.',
+    tip: 'Try to sort every dot correctly by hand. Then make the weights larger without changing their ratio: the line stays put but the answer gets more confident.' },
+  { id: 'learn', name: 'How it learns', sub: 'Rolling downhill on the error', make: chapterLearn,
+    what: 'Instead of tuning weights by hand, the network measures how wrong it is (the error) and nudges each weight in the direction that lowers it. The error surface shows the error for every possible pair of weights; learning is a ball rolling downhill on it. The learning rate is the size of each step.',
+    tip: 'Set the learning rate very high (above 10) and watch it overshoot. Set it very low and it crawls. Click the surface to drop the ball somewhere new.' },
+  { id: 'hidden', name: 'One line isn’t enough', sub: 'Hidden neurons combine lines', make: chapterHidden,
+    what: 'A single neuron can only draw one straight line, so it can’t separate XOR or a circle. Add a hidden layer and each hidden neuron draws its own line; the output neuron then combines them into bends, corners and enclosed regions. The small squares show what each neuron has learned to respond to.',
+    tip: 'Pick XOR with 0 hidden neurons: it gets stuck near 50%. Slide to 2 or 3 hidden neurons and watch it solve the puzzle.' },
+  { id: 'curves', name: 'Building any curve', sub: 'A sum of simple pieces', make: chapterCurves,
+    what: 'Networks can fit curves too. With ReLU, each hidden neuron contributes a piece that is flat and then bends into a straight ramp. Adding pieces with different bend points and slopes builds up almost any shape, a little like bending a wire at several places. More neurons means more bends.',
+    tip: 'Choose Draw your own, sketch something wild, and compare 3 neurons with 20.' },
+  { id: 'play', name: 'The playground', sub: 'Stack layers, watch it learn', make: chapterPlayground,
+    what: 'Now everything together. Each layer builds on the one before: the first layer draws lines, later layers combine them into more and more complex shapes. The hollow test dots are held back from training, so they show whether the network has learned the pattern or just memorized the dots it saw.',
+    tip: 'Try the spiral with 0 hidden layers, then 1, then 3. Then turn on extra inputs and solve the circle with no hidden layer at all.' },
+  { id: 'conv', name: 'How networks see', sub: 'Filters that find edges', make: chapterConv,
+    what: 'Image networks don’t look at the whole picture at once. They slide a small filter, here 3×3 weights, across the image, computing a weighted sum at every position. A filter that weights the right side positive and the left side negative lights up wherever brightness changes from left to right: a vertical edge. ReLU keeps the matches; pooling shrinks the map so the next layer can look at bigger patterns.',
+    tip: 'Pick Vertical edges, then draw a horizontal line: the feature map stays dark. Real networks learn their filter weights instead of having them typed in.' },
+];
+const byId = Object.fromEntries(CHAPTERS.map(c => [c.id, c]));
+let cur = null, active = null;
+
+function buildCatalog() {
+  $('#catalog').replaceChildren(...CHAPTERS.map((c, i) => h('button', { class: 'item', 'data-id': c.id, onclick: () => select(c.id) }, h('span', { class: 'n' }, String(i + 1).padStart(2, '0')), h('b', {}, c.name), h('span', {}, c.sub))));
+}
+function select(id) {
+  cur = byId[id] || CHAPTERS[0];
+  active?.dispose?.();
+  panes.length = 0; $('#panes').replaceChildren();
+  active = cur.make();
+  for (const b of document.querySelectorAll('.item')) b.setAttribute('aria-current', b.dataset.id === cur.id ? 'true' : 'false');
+  try { history.replaceState(null, '', '#' + cur.id); } catch (e) {}
+  const n = CHAPTERS.indexOf(cur) + 1;
+  $('#info').replaceChildren(
+    h('span', { class: 'eyebrow' }, `Chapter ${n} of ${CHAPTERS.length}`),
+    h('h2', {}, cur.name),
+    h('h4', {}, 'What’s happening'), h('p', {}, cur.what),
+    h('p', { class: 'tip', html: '<b>Try this:</b> ' + cur.tip }),
+    n < CHAPTERS.length ? h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => select(CHAPTERS[n].id) }, `Next: ${CHAPTERS[n].name} →`)) : null);
+  $('#controls').replaceChildren(h('h4', {}, 'Controls'), ...active.ui());
+  requestAnimationFrame(() => { panes.forEach(p => p.fit()); active.redraw(); });
+}
+new ResizeObserver(() => { if (!active) return; panes.forEach(p => p.fit()); active.redraw(); }).observe($('#panes'));
+let last = performance.now();
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  active?.tick?.(dt);
+}
+buildCatalog();
+const boot = () => { const id = location.hash.slice(1); select(byId[id] ? id : 'neuron'); requestAnimationFrame(tick); };
+Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot);
+// Debug hook: step chapters without animation frames
+window.__nn = { select, get active() { return active; }, step(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) active?.tick?.(dt); active.redraw(); } };
+</script>
+</body>
+</html>
