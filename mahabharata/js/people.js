@@ -1,7 +1,8 @@
 /* The full cast for the "Everyone" family tree: every person with a part in the story, from
    distant ancestors to the narrators, with a one-line description each. Lines are original
    summaries following the broad Sanskrit tradition; details vary between versions.
-   row: generation counted from Shantanu (0); ancestors are negative. Array order sets the
+   row: generation counted from Shantanu (0); ancestors are negative, one row per step of the
+   chain even where many unnamed generations lie between them. Array order sets the
    left-to-right order within each group and row. */
 (function () {
   const MB = window.MB = window.MB || {};
@@ -28,16 +29,16 @@
   const P = (id, name, group, row, line, x = {}) => ({ id, name, group, row, line, parents: [], spouses: [], ...x });
   MB.people = [
     /* ---------- ancestors ---------- */
-    P("yayati", "Yayati", "ancestors", -3, "Ancient king cursed with early old age, which his son Puru agreed to take on; ancestor of both the Kurus and the Yadavas.", { spouses: ["devayani", "sharmishtha"] }),
-    P("devayani", "Devayani", "ancestors", -3, "Daughter of the sage Shukra and Yayati’s queen; mother of Yadu.", { spouses: ["yayati"], parents: ["shukra"] }),
-    P("sharmishtha", "Sharmishtha", "ancestors", -3, "A princess made to serve Devayani as her maid, who secretly bore Yayati’s son Puru.", { spouses: ["yayati"] }),
-    P("yadu", "Yadu", "ancestors", -2, "Yayati’s eldest son, who refused to take his father’s old age; ancestor of the Yadavas, Krishna’s clan.", { parents: ["yayati", "devayani"] }),
-    P("puru", "Puru", "ancestors", -2, "Yayati’s youngest son, who took his father’s old age and was given the throne; ancestor of the Kurus.", { parents: ["yayati", "sharmishtha"] }),
-    P("dushyanta", "Dushyanta", "ancestors", -2, "King who married Shakuntala in a forest hermitage, then failed to recognize her at court.", { distant: ["puru"], spouses: ["shakuntala"] }),
-    P("shakuntala", "Shakuntala", "ancestors", -2, "Raised in the sage Kanva’s hermitage; wife of Dushyanta and mother of Bharata.", { spouses: ["dushyanta"] }),
-    P("bharata", "Bharata", "ancestors", -1, "Son of Dushyanta and Shakuntala; the dynasty, and India’s name Bharat, are said to come from him.", { parents: ["dushyanta", "shakuntala"] }),
-    P("hastin", "Hastin", "ancestors", -1, "A descendant of Bharata who founded the city of Hastinapura.", { distant: ["bharata"] }),
-    P("kurus", "Kuru", "ancestors", -1, "King whose name the clan bears; the field he ploughed became Kurukshetra.", { distant: ["hastin"] }),
+    P("yayati", "Yayati", "ancestors", -7, "Ancient king cursed with early old age, which his son Puru agreed to take on; ancestor of both the Kurus and the Yadavas.", { spouses: ["devayani", "sharmishtha"] }),
+    P("devayani", "Devayani", "ancestors", -7, "Daughter of the sage Shukra and Yayati’s queen; mother of Yadu.", { spouses: ["yayati"], parents: ["shukra"] }),
+    P("sharmishtha", "Sharmishtha", "ancestors", -7, "A princess made to serve Devayani as her maid, who secretly bore Yayati’s son Puru.", { spouses: ["yayati"] }),
+    P("yadu", "Yadu", "ancestors", -6, "Yayati’s eldest son, who refused to take his father’s old age; ancestor of the Yadavas, Krishna’s clan.", { parents: ["yayati", "devayani"] }),
+    P("puru", "Puru", "ancestors", -6, "Yayati’s youngest son, who took his father’s old age and was given the throne; ancestor of the Kurus.", { parents: ["yayati", "sharmishtha"] }),
+    P("dushyanta", "Dushyanta", "ancestors", -5, "King who married Shakuntala in a forest hermitage, then failed to recognize her at court.", { distant: ["puru"], spouses: ["shakuntala"] }),
+    P("shakuntala", "Shakuntala", "ancestors", -5, "Raised in the sage Kanva’s hermitage; wife of Dushyanta and mother of Bharata.", { spouses: ["dushyanta"] }),
+    P("bharata", "Bharata", "ancestors", -4, "Son of Dushyanta and Shakuntala; the dynasty, and India’s name Bharat, are said to come from him.", { parents: ["dushyanta", "shakuntala"] }),
+    P("hastin", "Hastin", "ancestors", -3, "A descendant of Bharata who founded the city of Hastinapura.", { distant: ["bharata"] }),
+    P("kurus", "Kuru", "ancestors", -2, "King whose name the clan bears; the field he ploughed became Kurukshetra.", { distant: ["hastin"] }),
 
     /* ---------- the Kuru house ---------- */
     P("pratipa", "Pratipa", "kuru", -1, "Shantanu’s father, who promised the river goddess Ganga she would marry his son.", { distant: ["kurus"] }),
