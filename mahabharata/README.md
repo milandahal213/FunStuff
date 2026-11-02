@@ -10,17 +10,19 @@ Three linked views that help readers grasp the Mahabharata's geography and times
 | `map.html` | The living map: ten chapters, each flying to its region and drawing its journeys with straight-line distances |
 | `lifelines.html` | One lane per character from birth to death, with events across all lanes; zooms from six generations to the exile years, the 18 days (split by Kaurava commander) and real-world dating |
 | `story.html` | Scrollytelling: the retelling beside a small map, a family tree that greys out the fallen, and battlefield sketches for the war |
+| `family.html` | Everyone: a pannable family tree of 179 people, from Yayati to Janamejaya plus gods, sages, narrators and the characters of the inner stories; click a circle for a one-line summary |
 
 ## Files
 
 ```
 mahabharata/
-  index.html, map.html, lifelines.html, story.html
+  index.html, map.html, lifelines.html, story.html, family.html
   css/style.css    shared tokens (light and dark), fonts and layout
   js/data.js       places, chapters, war steps, characters, events, history: the single source of truth
+  js/people.js     the full cast for the Everyone tree, with family links and one-line descriptions
   js/geo.js        projection, coastline, rivers, mountains, camera, markers, journey legs
   js/common.js     embed mode, reduced motion, story-time wording, deep links
-  js/map.js, js/lifelines.js, js/story.js
+  js/map.js, js/lifelines.js, js/story.js, js/family.js
 ```
 
 Plain classic scripts, no build step and no dependencies beyond Google Fonts (Yatra One and Hind), so every page also opens straight from disk.
@@ -31,7 +33,7 @@ All times are story-relative years, with **year 0 the game of dice**; war days r
 
 ## Deep links and embedding
 
-- `map.html#chapter-5`, `story.html#chapter-9`, `lifelines.html#war` (also `#generations`, `#exile`, `#history`, or a character id such as `#karna`).
+- `map.html#chapter-5`, `story.html#chapter-9`, `lifelines.html#war` (also `#generations`, `#exile`, `#history`, or a character id such as `#karna`), `family.html#draupadi`.
 - Each view fills its container and scrolls internally, so it works inside an `<iframe>`. Inside a frame, or with `?embed` in the URL, the site navigation is hidden.
 
 ## Caveats kept on the pages

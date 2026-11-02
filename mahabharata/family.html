@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Everyone in the Mahabharata</title>
+<meta name="description" content="A pannable family tree of everyone with a part in the Mahabharata, from Yayati to Janamejaya, with a one-line description of each person.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600&family=Yatra+One&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page">
+  <header class="topnav">
+    <a class="home" href="../">← FunStuff</a>
+    <a class="brand" href="./">Mahabharata</a>
+    <nav aria-label="Views"><a href="map.html">Map</a><a href="lifelines.html">Lifelines</a><a href="story.html">Story</a><a href="family.html" aria-current="page">Everyone</a></nav>
+  </header>
+  <div class="view famapp">
+    <div class="fambar">
+      <h1>Everyone in the story</h1>
+      <div class="famtools">
+        <label class="search"><span class="visually-hidden">Find a person</span><input id="find" type="search" list="names" placeholder="Find a person…" autocomplete="off"></label>
+        <datalist id="names"></datalist>
+        <button class="btn" id="zin" aria-label="Zoom in">+</button>
+        <button class="btn" id="zout" aria-label="Zoom out">−</button>
+        <button class="btn" id="fit">Show everyone</button>
+      </div>
+    </div>
+    <div class="famstage" id="stage">
+      <svg id="fam" class="famsvg" role="img" aria-label="Family tree of everyone in the Mahabharata"></svg>
+      <div class="pop" id="pop" hidden role="dialog" aria-live="polite"></div>
+      <p class="famhint" id="hint">Drag to move around, scroll or pinch to zoom. Click any circle.</p>
+    </div>
+    <aside id="detail" aria-live="polite"></aside>
+  </div>
+</div>
+<script src="js/data.js"></script>
+<script src="js/people.js"></script>
+<script src="js/common.js"></script>
+<script src="js/family.js"></script>
+</body>
+</html>
