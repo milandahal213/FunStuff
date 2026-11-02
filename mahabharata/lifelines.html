@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mahabharata Lifelines</title>
+<meta name="description" content="One lifeline per character across six generations of the Mahabharata, zooming from generations to the exile years to the eighteen days of war.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600&family=Yatra+One&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page">
+  <header class="topnav">
+    <a class="home" href="../">← FunStuff</a>
+    <a class="brand" href="./">Mahabharata</a>
+    <nav aria-label="Views"><a href="map.html">Map</a><a href="lifelines.html" aria-current="page">Lifelines</a><a href="story.html">Story</a></nav>
+  </header>
+  <div class="view lifeapp">
+    <div class="lifebar">
+      <h1>Who was alive when</h1>
+      <div class="zooms chips" role="group" aria-label="Zoom" id="zooms"></div>
+    </div>
+    <div class="lifemain">
+      <div class="axiswrap"><svg class="lifesvg" id="axis" aria-hidden="true"></svg></div>
+      <div class="laneswrap" id="laneswrap">
+        <svg class="lifesvg" id="lanes" role="img" aria-label="Lifelines of the main characters"></svg>
+        <svg class="lifesvg" id="history" hidden role="img" aria-label="Where the story sits in real history"></svg>
+      </div>
+    </div>
+    <aside id="detail" aria-live="polite"></aside>
+  </div>
+</div>
+<script src="js/data.js"></script>
+<script src="js/common.js"></script>
+<script src="js/lifelines.js"></script>
+</body>
+</html>

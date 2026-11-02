@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Where the Mahabharata happened</title>
+<meta name="description" content="Follow the Mahabharata across the subcontinent chapter by chapter, with the journeys and distances in each.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600&family=Yatra+One&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page">
+  <header class="topnav">
+    <a class="home" href="../">← FunStuff</a>
+    <a class="brand" href="./">Mahabharata</a>
+    <nav aria-label="Views"><a href="map.html" aria-current="page">Map</a><a href="lifelines.html">Lifelines</a><a href="story.html">Story</a></nav>
+  </header>
+  <div class="view mapapp">
+    <header>
+      <h1>Where the Mahabharata happened</h1>
+      <p>Follow the story across the subcontinent, chapter by chapter. Distances are straight-line estimates between traditional sites.</p>
+    </header>
+    <div class="mapwrap">
+      <svg id="map" role="img" aria-label="Map of ancient India showing the places and journeys in the current chapter"></svg>
+      <div class="legend" aria-hidden="true">
+        <span><i style="background:var(--pandava)"></i>Pandavas and allies</span>
+        <span><i style="background:var(--kaurava)"></i>Kauravas and allies</span>
+        <span><i style="background:var(--kuru)"></i>Kuru house before the split</span>
+        <span><i class="dash"></i>Sarasvati, the lost river</span>
+      </div>
+    </div>
+    <aside id="panel" aria-live="polite"></aside>
+    <nav class="timeline" aria-label="Chapters">
+      <div class="ctrl">
+        <button class="btn" id="prev" aria-label="Previous chapter">Back</button>
+        <button class="btn" id="play">Play the story</button>
+        <button class="btn" id="next" aria-label="Next chapter">Next</button>
+      </div>
+      <ol class="phases" id="phases"></ol>
+    </nav>
+  </div>
+</div>
+<script src="js/data.js"></script>
+<script src="js/common.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/map.js"></script>
+</body>
+</html>

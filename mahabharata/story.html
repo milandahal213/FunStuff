@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Mahabharata, Step by Step</title>
+<meta name="description" content="Scroll through the Mahabharata with a map, a family tree that greys out the fallen, and sketches of the battlefield formations.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600&family=Yatra+One&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page">
+  <header class="topnav">
+    <a class="home" href="../">← FunStuff</a>
+    <a class="brand" href="./">Mahabharata</a>
+    <nav aria-label="Views"><a href="map.html">Map</a><a href="lifelines.html">Lifelines</a><a href="story.html" aria-current="page">Story</a></nav>
+  </header>
+  <div class="view storyapp">
+    <div class="narrative" id="narrative">
+      <div class="intro">
+        <h1>The story, step by step</h1>
+        <p>Scroll through the epic. The map follows each journey, the family tree lights up the people in each part and greys out those who have died, and the war zooms in to the battlefield.</p>
+        <p class="hint">Use the scroll wheel, the arrow keys, or swipe. Each part has its own link, so you can share a single chapter.</p>
+      </div>
+      <div id="steps"></div>
+      <div class="outro" id="outro"></div>
+    </div>
+    <div class="visuals">
+      <div class="vis-top">
+        <svg id="map" role="img" aria-label="Map showing the journeys in the current part of the story"></svg>
+        <div class="battle" id="battle" hidden><svg class="battle-svg" id="battlesvg" viewBox="0 0 400 300" role="img"></svg></div>
+        <div class="caption" id="caption" aria-live="polite"></div>
+      </div>
+      <div class="vis-tree">
+        <span class="tree-title" id="treetitle">Family tree</span>
+        <svg class="treesvg" id="tree" role="img" aria-label="Family tree highlighting who is involved and who has died"></svg>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="js/data.js"></script>
+<script src="js/common.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/story.js"></script>
+</body>
+</html>
