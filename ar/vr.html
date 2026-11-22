@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cardboard VR · Through the Looking Glass</title>
+<meta name="description" content="A split-screen stereo scene you steer by turning your head — works with any Google Cardboard viewer, and native WebXR VR where available.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/base.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<style>
+  /* thin divider down the middle in stereo mode, as a lens guide */
+  .divider { position: fixed; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(255,255,255,.12); z-index: 20; }
+</style>
+</head>
+<body>
+<div class="stage"><canvas id="canvas"></canvas></div>
+<div class="divider" id="divider" hidden></div>
+
+<div class="topbar" id="topbar">
+  <a class="home" href="index.html">← Looking Glass</a>
+  <span class="title">Cardboard VR</span>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="panel card">
+    <h2>Cardboard VR</h2>
+    <p id="introText">Checking your device…</p>
+    <p style="font-size:13px">Native VR: <span class="badge" id="bvr">—</span> &nbsp; Stereo + head-tracking: <span class="badge" id="bstereo">—</span></p>
+    <div class="row">
+      <button class="btn primary" id="startBtn" disabled>Checking…</button>
+      <a class="btn ghost" href="index.html">Back</a>
+    </div>
+    <p style="font-size:12px;margin-top:12px">Tip: turn your phone <b>landscape</b> and slot it into a Cardboard viewer. Tap the screen (or the viewer's button) to recenter.</p>
+  </div>
+</div>
+
+<div class="controls" id="controls" hidden>
+  <button class="btn" id="recenter">⟳ Recenter</button>
+  <button class="btn ghost" id="exit">Exit</button>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+const canvas = document.getElementById('canvas');
+let renderer, scene, camera, stereo, mode = null;
+let yawOffset = 0; // recenter offset for device-orientation
+let deviceQ = new THREE.Quaternion(), haveDevice = false;
+
+// ---------- scene ----------
+function buildScene() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x05070d);
+  scene.fog = new THREE.FogExp2(0x05070d, 0.025);
+
+  camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 200);
+  camera.position.set(0, 1.6, 0); // standing eye height
+
+  scene.add(new THREE.HemisphereLight(0x9fd8ff, 0x101522, 1.0));
+  const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(3, 6, 2); scene.add(key);
+
+  // ground grid
+  const grid = new THREE.GridHelper(60, 60, 0x2a6f66, 0x16303a);
+  grid.material.transparent = true; grid.material.opacity = 0.5; scene.add(grid);
+
+  // stars
+  const starGeo = new THREE.BufferGeometry();
+  const N = 1200, pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const r = 40 + Math.random() * 60, th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+    pos[i*3] = r * Math.sin(ph) * Math.cos(th);
+    pos[i*3+1] = Math.abs(r * Math.cos(ph)) * 0.6 + 2;
+    pos[i*3+2] = r * Math.sin(ph) * Math.sin(th);
+  }
+  starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xbfe9ff, size: 0.25, sizeAttenuation: true })));
+
+  // a ring of glowing shapes to look around at
+  const palette = [0x36d6c3, 0xff6b6b, 0xffb454, 0x5b8cff, 0xc084fc, 0x7CFCB0];
+  const geos = [
+    new THREE.IcosahedronGeometry(0.5, 0),
+    new THREE.TorusKnotGeometry(0.35, 0.12, 80, 16),
+    new THREE.BoxGeometry(0.7, 0.7, 0.7),
+    new THREE.ConeGeometry(0.45, 0.9, 32),
+    new THREE.DodecahedronGeometry(0.5),
+    new THREE.OctahedronGeometry(0.55)
+  ];
+  window.__spin = [];
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2;
+    const mat = new THREE.MeshStandardMaterial({ color: palette[i], roughness: 0.3, metalness: 0.25, emissive: new THREE.Color(palette[i]).multiplyScalar(0.12) });
+    const mesh = new THREE.Mesh(geos[i], mat);
+    mesh.position.set(Math.cos(a) * 4, 1.6 + Math.sin(a * 2) * 0.5, Math.sin(a) * 4);
+    scene.add(mesh); window.__spin.push(mesh);
+  }
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  stereo = new THREE.StereoCamera(); stereo.aspect = 0.5;
+}
+
+// ---------- device orientation head tracking ----------
+const zee = new THREE.Vector3(0, 0, 1);
+const euler = new THREE.Euler();
+const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+const qTmp = new THREE.Quaternion();
+function onOrient(e) {
+  if (e.alpha == null) return;
+  haveDevice = true;
+  const alpha = THREE.MathUtils.degToRad(e.alpha);
+  const beta = THREE.MathUtils.degToRad(e.beta);
+  const gamma = THREE.MathUtils.degToRad(e.gamma);
+  const orient = THREE.MathUtils.degToRad(screen.orientation ? screen.orientation.angle : (window.orientation || 0));
+  euler.set(beta, alpha, -gamma, 'YXZ');
+  deviceQ.setFromEuler(euler);
+  deviceQ.multiply(q1);
+  deviceQ.multiply(qTmp.setFromAxisAngle(zee, -orient));
+}
+
+// pointer-drag look for laptops
+let yaw = 0, pitch = 0, dragging = false, px = 0, py = 0;
+function initDrag() {
+  canvas.addEventListener('pointerdown', e => { dragging = true; px = e.clientX; py = e.clientY; });
+  window.addEventListener('pointerup', () => dragging = false);
+  window.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    yaw -= (e.clientX - px) * 0.004; pitch -= (e.clientY - py) * 0.004;
+    pitch = Math.max(-1.3, Math.min(1.3, pitch)); px = e.clientX; py = e.clientY;
+  });
+}
+
+// ---------- detection ----------
+async function detect() {
+  let vrOk = false;
+  try { vrOk = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-vr')); } catch {}
+  document.getElementById('bvr').className = 'badge ' + (vrOk ? 'ok' : 'no');
+  document.getElementById('bvr').textContent = vrOk ? 'yes' : 'no';
+  document.getElementById('bstereo').className = 'badge ok';
+  document.getElementById('bstereo').textContent = 'yes';
+  const btn = document.getElementById('startBtn'), txt = document.getElementById('introText');
+  if (vrOk) {
+    mode = 'xr';
+    txt.innerHTML = 'Your device has native WebXR VR (a headset or Cardboard-capable Android). It renders stereo and tracks your head for you.';
+    btn.textContent = 'Enter VR';
+  } else {
+    mode = 'stereo';
+    txt.innerHTML = 'Using the built-in <b>stereo renderer</b>: the scene is drawn twice side-by-side and follows your phone as you turn. Perfect for a Cardboard viewer; on a laptop, drag to look.';
+    btn.textContent = 'Enter stereo VR';
+  }
+  btn.disabled = false;
+}
+
+// ---------- start ----------
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (mode === 'stereo' && typeof DeviceOrientationEvent !== 'undefined'
+      && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch {}
+  }
+  buildScene();
+  document.getElementById('intro').hidden = true;
+  document.getElementById('controls').hidden = false;
+  if (mode === 'xr') startXR(); else startStereo();
+});
+
+async function startXR() {
+  renderer.xr.enabled = true;
+  const session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] });
+  await renderer.xr.setSession(session);
+  session.addEventListener('end', () => location.reload());
+  document.getElementById('exit').onclick = () => session.end();
+  document.getElementById('recenter').hidden = true;
+  renderer.setAnimationLoop(() => { spin(); renderer.render(scene, camera); });
+}
+
+function startStereo() {
+  document.getElementById('divider').hidden = false;
+  window.addEventListener('deviceorientation', onOrient, true);
+  initDrag();
+  try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch {}
+  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{}); } catch {}
+  document.getElementById('exit').onclick = () => location.reload();
+  document.getElementById('recenter').onclick = recenter;
+  canvas.addEventListener('click', recenter);
+
+  const size = new THREE.Vector2();
+  renderer.setAnimationLoop(() => {
+    spin();
+    // apply head orientation
+    if (haveDevice) {
+      camera.quaternion.copy(deviceQ);
+      camera.rotateY(yawOffset);
+    } else {
+      camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+    }
+    camera.updateMatrixWorld();
+    stereo.update(camera);
+    renderer.getSize(size);
+    const w = size.x, h = size.y;
+    renderer.setScissorTest(true);
+    renderer.setScissor(0, 0, w / 2, h); renderer.setViewport(0, 0, w / 2, h);
+    renderer.render(scene, stereo.cameraL);
+    renderer.setScissor(w / 2, 0, w / 2, h); renderer.setViewport(w / 2, 0, w / 2, h);
+    renderer.render(scene, stereo.cameraR);
+    renderer.setScissorTest(false);
+  });
+}
+
+function recenter() {
+  if (haveDevice) {
+    // zero out current heading
+    const e = new THREE.Euler().setFromQuaternion(deviceQ, 'YXZ');
+    yawOffset = -e.y;
+  } else { yaw = 0; pitch = 0; }
+}
+
+function spin() {
+  const t = performance.now() * 0.001;
+  (window.__spin || []).forEach((m, i) => { m.rotation.x = t * (0.3 + i * 0.05); m.rotation.y = t * (0.4 + i * 0.03); });
+}
+
+addEventListener('resize', () => {
+  if (!renderer || mode === 'xr') return;
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+detect();
+</script>
+</body>
+</html>

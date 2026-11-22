@@ -239,9 +239,10 @@ a { color: var(--pandava); }
 .pnode:focus { outline: none; }
 .pnode:focus-visible circle, .pnode.sel circle { stroke: var(--ink); stroke-width: calc(var(--u, 1) * 2.6px); }
 .pnode.sel text, .pnode.rel text { opacity: 1; font-weight: 600; }
-.famsvg.focus .pnode:not(.sel):not(.rel) { opacity: .2; }
-.famsvg.focus .flink { opacity: .25; }
-.flink { fill: none; stroke: var(--muted); stroke-opacity: .55; stroke-width: calc(var(--u, 1) * 1.2px); }
+.famsvg.focus .pnode:not(.sel):not(.rel) { opacity: .18; }
+.famsvg.focus .flink { opacity: .2; }
+.flink { fill: none; stroke: var(--muted); stroke-opacity: .6; stroke-width: calc(var(--u, 1) * 1.3px); stroke-linejoin: round; }
+.flink.marriage { stroke: var(--ink); stroke-opacity: .45; stroke-width: calc(var(--u, 1) * 2px); }
 .flink.spouse { stroke-dasharray: calc(var(--u, 1) * 4px) calc(var(--u, 1) * 3px); }
 .flink.distant { stroke-dasharray: calc(var(--u, 1) * 1.5px) calc(var(--u, 1) * 4px); }
 .flink.rebirth { stroke: var(--kaurava); stroke-dasharray: calc(var(--u, 1) * 1.5px) calc(var(--u, 1) * 4px); }

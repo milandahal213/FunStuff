@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Place in your space · Through the Looking Glass</title>
+<meta name="description" content="Drop a 3D model onto the floor in front of you at real scale, in the browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/base.css">
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<style>
+  model-viewer { --poster-color: #0b0d13; background: radial-gradient(900px 500px at 50% 20%, #10141d, #060709); }
+  .mv-ar-btn { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); }
+  .loadwrap { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+  .tools { gap: 10px; }
+  .filename { font-family: var(--mono); font-size: 12px; color: var(--muted); max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <model-viewer id="mv"
+    src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+    ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
+    alt="A 3D model you can place in your room"
+    ar ar-modes="webxr scene-viewer quick-look" ar-scale="auto"
+    camera-controls touch-action="pan-y" shadow-intensity="1"
+    environment-image="neutral" exposure="1.0"
+    poster-color="transparent">
+    <button slot="ar-button" class="btn primary mv-ar-btn">👁 View in your space</button>
+    <div class="loadwrap" slot="progress-bar">Loading model…</div>
+  </model-viewer>
+</div>
+
+<div class="topbar">
+  <a class="home" href="index.html">← Looking Glass</a>
+  <span class="title">Place in your space</span>
+</div>
+
+<div class="hint" id="hint">Drag to orbit · pinch to zoom · tap <b>View in your space</b> to place it in the room</div>
+
+<div class="controls tools">
+  <button class="btn" id="sample">Astronaut (sample)</button>
+  <button class="btn primary" id="importBtn">Import a model…</button>
+  <span class="filename" id="fname"></span>
+  <input class="file-in" id="file" type="file" accept=".glb,.gltf,.usdz,model/gltf-binary,model/vnd.usdz+zip">
+</div>
+
+<script>
+  const mv = document.getElementById('mv');
+  const file = document.getElementById('file');
+  const fname = document.getElementById('fname');
+  const hint = document.getElementById('hint');
+
+  const SAMPLE = {
+    src: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
+    ios: 'https://modelviewer.dev/shared-assets/models/Astronaut.usdz'
+  };
+
+  document.getElementById('importBtn').addEventListener('click', () => file.click());
+  document.getElementById('sample').addEventListener('click', () => {
+    mv.src = SAMPLE.src; mv.setAttribute('ios-src', SAMPLE.ios);
+    fname.textContent = ''; flash('Sample loaded');
+  });
+
+  file.addEventListener('change', () => {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    const isUsdz = /\.usdz$/i.test(f.name);
+    fname.textContent = f.name;
+    if (isUsdz) {
+      // model-viewer can't render .usdz inline; it is only used by iOS Quick Look.
+      mv.removeAttribute('src');
+      mv.setAttribute('ios-src', url);
+      flash('USDZ loaded — tap "View in your space" on an iPhone');
+    } else {
+      mv.src = url;
+      mv.removeAttribute('ios-src'); // no USDZ companion, so iPhone Quick Look is unavailable for this file
+      flash('Model loaded. On iPhone, import a .usdz for AR.');
+    }
+  });
+
+  let flashT;
+  function flash(msg) {
+    hint.innerHTML = msg;
+    clearTimeout(flashT);
+    flashT = setTimeout(() => {
+      hint.innerHTML = 'Drag to orbit · pinch to zoom · tap <b>View in your space</b> to place it in the room';
+    }, 3200);
+  }
+
+  mv.addEventListener('ar-status', (e) => {
+    if (e.detail.status === 'failed') flash('AR couldn’t start on this device — the 3D preview still works.');
+  });
+  mv.addEventListener('error', () => flash('Couldn’t load that model. Try a .glb or .gltf file.'));
+</script>
+</body>
+</html>

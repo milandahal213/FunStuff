@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3D photo booth · Through the Looking Glass</title>
+<meta name="description" content="Shoot a left-eye and right-eye frame and export a red/cyan anaglyph, a Cardboard side-by-side pair, or a wiggle GIF.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/base.css">
+<style>
+  .cam { position: fixed; inset: 0; background: #000; }
+  .cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .ghost { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .4; mix-blend-mode: screen; pointer-events: none; display: none; }
+  .step { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 25; }
+  .results { position: fixed; inset: 0; z-index: 40; overflow: auto; background: var(--ink); padding: 60px 16px 40px; }
+  .results .wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 22px; }
+  .results h2 { font: 650 24px/1.1 var(--display); margin: 0; }
+  .out { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+  .out h3 { margin: 0; font-size: 15px; }
+  .out p { margin: 0; color: var(--muted); font-size: 13px; }
+  .out canvas, .out img { width: 100%; border-radius: 8px; background: #000; display: block; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .seg button { background: var(--panel-2); border: none; padding: 7px 12px; cursor: pointer; font-size: 13px; }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #042019; }
+</style>
+</head>
+<body>
+
+<!-- Capture view -->
+<div class="cam" id="cam">
+  <video id="video" playsinline muted></video>
+  <img id="ghost" class="ghost" alt="">
+</div>
+
+<div class="topbar">
+  <a class="home" href="index.html">← Looking Glass</a>
+  <span class="title">3D photo booth</span>
+</div>
+
+<div class="hint step" id="step">Line up your shot, then capture the <b>left</b> eye</div>
+
+<div class="controls" id="capControls">
+  <button class="btn" id="flip">⇄ Flip camera</button>
+  <button class="btn primary" id="shoot" disabled>● Capture left</button>
+  <button class="btn ghost" id="retake" hidden>Retake</button>
+</div>
+
+<!-- Intro gate (camera permission) -->
+<div class="overlay" id="intro">
+  <div class="panel card">
+    <h2>3D photo booth</h2>
+    <p>Take two photos of the same still scene: one for the <b>left</b> eye, then shift the phone a few centimetres to the <b>right</b> and take the second. A faint overlay helps you line them up. Works best on things that don't move, a metre or more away.</p>
+    <div class="row">
+      <button class="btn primary" id="enable">Enable camera</button>
+      <a class="btn ghost" href="index.html">Back</a>
+    </div>
+    <p id="camErr" style="color:var(--bad);font-size:13px"></p>
+  </div>
+</div>
+
+<!-- Results -->
+<div class="results" id="results" hidden>
+  <div class="wrap">
+    <h2>Your 3D photo</h2>
+    <div class="row">
+      <span style="color:var(--muted);font-size:13px">Eye order:</span>
+      <div class="seg" id="swap">
+        <button data-swap="0" aria-pressed="true">Left → Right</button>
+        <button data-swap="1" aria-pressed="false">Swap</button>
+      </div>
+      <button class="btn ghost" id="again">↺ Shoot another</button>
+    </div>
+
+    <div class="out">
+      <h3>Anaglyph <span style="color:var(--muted);font-weight:400">· red/cyan glasses</span></h3>
+      <canvas id="anaglyph"></canvas>
+      <div class="row"><button class="btn" id="dlAna">Download PNG</button></div>
+    </div>
+
+    <div class="out">
+      <h3>Side-by-side <span style="color:var(--muted);font-weight:400">· for a Cardboard viewer</span></h3>
+      <canvas id="sbs"></canvas>
+      <div class="row"><button class="btn" id="dlSbs">Download PNG</button>
+        <a class="btn ghost" href="vr.html">Open a viewer</a></div>
+    </div>
+
+    <div class="out">
+      <h3>Wiggle <span style="color:var(--muted);font-weight:400">· 3D with no glasses</span></h3>
+      <canvas id="wiggle"></canvas>
+      <div class="row"><button class="btn" id="dlGif" disabled>Building GIF…</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
+<script>
+const video = document.getElementById('video');
+const ghost = document.getElementById('ghost');
+const step = document.getElementById('step');
+const shoot = document.getElementById('shoot');
+const results = document.getElementById('results');
+
+let stream = null, facing = 'environment';
+let stage = 'left'; // 'left' | 'right'
+let leftCanvas = null, rightCanvas = null;
+let swap = 0;
+let wiggleTimer = null, gifBlobUrl = null;
+
+const MAXW = 1024;
+
+async function startCam() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing } }, audio: false });
+    video.srcObject = stream; await video.play();
+    document.getElementById('intro').hidden = true;
+    shoot.disabled = false;
+  } catch (e) {
+    document.getElementById('camErr').textContent = 'Camera unavailable: ' + (e && e.message ? e.message : e);
+  }
+}
+
+function grab() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const scale = Math.min(1, MAXW / vw);
+  const w = Math.round(vw * scale), h = Math.round(vh * scale);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(video, 0, 0, w, h);
+  return c;
+}
+
+shoot.addEventListener('click', () => {
+  if (stage === 'left') {
+    leftCanvas = grab();
+    ghost.src = leftCanvas.toDataURL('image/jpeg', 0.7);
+    ghost.style.display = 'block';
+    stage = 'right';
+    step.innerHTML = 'Shift <b>right</b> a few cm, line up with the overlay, capture the <b>right</b> eye';
+    shoot.textContent = '● Capture right';
+    document.getElementById('retake').hidden = false;
+  } else {
+    rightCanvas = grab();
+    finish();
+  }
+});
+
+document.getElementById('retake').addEventListener('click', resetCapture);
+document.getElementById('again').addEventListener('click', () => { results.hidden = true; resetCapture(); });
+
+function resetCapture() {
+  stage = 'left'; leftCanvas = rightCanvas = null;
+  ghost.style.display = 'none'; ghost.src = '';
+  step.innerHTML = 'Line up your shot, then capture the <b>left</b> eye';
+  shoot.textContent = '● Capture left';
+  document.getElementById('retake').hidden = true;
+}
+
+document.getElementById('flip').addEventListener('click', () => {
+  facing = facing === 'environment' ? 'user' : 'environment'; startCam();
+});
+document.getElementById('enable').addEventListener('click', startCam);
+
+// eye-order swap
+document.getElementById('swap').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#swap button').forEach(x => x.setAttribute('aria-pressed', 'false'));
+  b.setAttribute('aria-pressed', 'true'); swap = +b.dataset.swap; render();
+});
+
+function eyes() { return swap ? [rightCanvas, leftCanvas] : [leftCanvas, rightCanvas]; }
+
+function finish() {
+  ghost.style.display = 'none';
+  results.hidden = false;
+  render();
+}
+
+function render() {
+  const [L, R] = eyes();
+  const w = Math.min(L.width, R.width), h = Math.min(L.height, R.height);
+
+  // --- anaglyph (red / cyan) ---
+  const ac = document.getElementById('anaglyph'); ac.width = w; ac.height = h;
+  const actx = ac.getContext('2d');
+  const lx = cropData(L, w, h), rx = cropData(R, w, h);
+  const out = actx.createImageData(w, h);
+  for (let i = 0; i < out.data.length; i += 4) {
+    out.data[i]   = lx.data[i];       // R from left
+    out.data[i+1] = rx.data[i+1];     // G from right
+    out.data[i+2] = rx.data[i+2];     // B from right
+    out.data[i+3] = 255;
+  }
+  actx.putImageData(out, 0, 0);
+
+  // --- side-by-side (parallel, for Cardboard) ---
+  const sc = document.getElementById('sbs'); sc.width = w * 2; sc.height = h;
+  const sctx = sc.getContext('2d');
+  sctx.drawImage(L, 0, 0, w, h); sctx.drawImage(R, w, 0, w, h);
+
+  // --- wiggle preview ---
+  startWiggle(L, R, w, h);
+  buildGif(L, R, w, h);
+
+  wire('dlAna', ac, 'anaglyph-3d.png');
+  wire('dlSbs', sc, 'sidebyside-3d.png');
+}
+
+function cropData(canvas, w, h) {
+  const t = document.createElement('canvas'); t.width = w; t.height = h;
+  t.getContext('2d').drawImage(canvas, 0, 0, w, h);
+  return t.getContext('2d').getImageData(0, 0, w, h);
+}
+
+function startWiggle(L, R, w, h) {
+  const c = document.getElementById('wiggle'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'); let f = 0;
+  clearInterval(wiggleTimer);
+  wiggleTimer = setInterval(() => { ctx.drawImage(f ? R : L, 0, 0, w, h); f ^= 1; }, 130);
+}
+
+// --- animated GIF via gif.js, worker loaded as same-origin blob to dodge CORS ---
+async function buildGif(L, R, w, h) {
+  const btn = document.getElementById('dlGif');
+  btn.disabled = true; btn.textContent = 'Building GIF…';
+  if (gifBlobUrl) { URL.revokeObjectURL(gifBlobUrl); gifBlobUrl = null; }
+  try {
+    const workerUrl = await blobWorker('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js');
+    const gif = new GIF({ workers: 2, quality: 10, width: w, height: h, workerScript: workerUrl });
+    const cl = frameCanvas(L, w, h), cr = frameCanvas(R, w, h);
+    gif.addFrame(cl, { delay: 130 }); gif.addFrame(cr, { delay: 130 });
+    gif.on('finished', blob => {
+      gifBlobUrl = URL.createObjectURL(blob);
+      btn.disabled = false; btn.textContent = 'Download GIF';
+      btn.onclick = () => triggerDownload(gifBlobUrl, 'wiggle-3d.gif');
+    });
+    gif.render();
+  } catch (e) {
+    btn.textContent = 'GIF unavailable'; btn.disabled = true;
+  }
+}
+
+function frameCanvas(src, w, h) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(src, 0, 0, w, h); return c;
+}
+async function blobWorker(url) {
+  const res = await fetch(url); const txt = await res.text();
+  return URL.createObjectURL(new Blob([txt], { type: 'application/javascript' }));
+}
+function wire(id, canvas, name) {
+  document.getElementById(id).onclick = () => canvas.toBlob(b => triggerDownload(URL.createObjectURL(b), name), 'image/png');
+}
+function triggerDownload(url, name) {
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+
+if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && isSecureContext)) {
+  document.getElementById('camErr').textContent = 'This needs camera access over HTTPS. Open it on https (GitHub Pages works) on a device with a camera.';
+  document.getElementById('enable').disabled = true;
+}
+</script>
+</body>
+</html>
