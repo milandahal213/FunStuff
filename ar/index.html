@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Through the Looking Glass</title>
+<meta name="description" content="Place 3D models in your room, draw shapes in the air, step into Cardboard VR, and shoot your own 3D photos — all in the browser, on phones and laptops.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+<main class="hub">
+  <header>
+    <a class="back" href="../">← FunStuff</a>
+    <h1>Through the <span>Looking&nbsp;Glass</span></h1>
+    <p class="lede">Four small experiments that mix 3D with the real world, straight from the browser — no app to install. Point your phone at the room, or use a laptop webcam. A Google&nbsp;Cardboard viewer unlocks the VR and 3D-photo modes.</p>
+  </header>
+
+  <div class="modes">
+    <a class="mode" href="place.html">
+      <span class="ic">📦</span>
+      <strong>Place in your space</strong>
+      <p>Drop a 3D model (yours or a sample) onto the floor in front of you and walk around it, at real scale.</p>
+    </a>
+    <a class="mode" href="draw.html">
+      <span class="ic">✏️</span>
+      <strong>Draw in the air</strong>
+      <p>Tap real surfaces to stick down cubes, spheres and cones in colour. Falls back to a camera window where AR isn't supported.</p>
+    </a>
+    <a class="mode" href="vr.html">
+      <span class="ic">🥽</span>
+      <strong>Cardboard VR</strong>
+      <p>A split-screen stereo scene you steer by turning your head. Works with any Cardboard-style viewer; uses native VR where available.</p>
+    </a>
+    <a class="mode" href="stereo.html">
+      <span class="ic">📷</span>
+      <strong>3D photo booth</strong>
+      <p>Shoot a left-eye and right-eye frame, then export a red/cyan anaglyph, a Cardboard side-by-side pair, or a wiggle GIF.</p>
+    </a>
+  </div>
+
+  <p class="note">
+    <b>What runs where.</b> "Place in your space" works on Android and iPhone. "Draw in the air" gives true world-anchored AR on Android (WebXR); on iPhone and laptops it falls back to a steer-able camera window. "Cardboard VR" and the "3D photo booth" work on all three. Everything needs <b>HTTPS and camera permission</b> — fine on GitHub Pages. On iPhone the browser engine is always Safari/WebKit, so WebXR isn't available there regardless of which browser you use.
+  </p>
+</main>
+</body>
+</html>
