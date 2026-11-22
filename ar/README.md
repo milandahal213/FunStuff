@@ -10,7 +10,7 @@ Browser-based AR/VR experiments. No install, no backend — just static pages se
 | --- | --- | --- | --- | --- |
 | `place.html` | Place a 3D model on the floor at real scale | WebXR / Scene Viewer | AR Quick Look (`.usdz`) | 3D preview only (no world AR) |
 | `draw.html` | Tap surfaces to place coloured shapes | World-anchored (WebXR hit-test) | Camera-window fallback | Camera-window fallback |
-| `vr.html` | Stereo scene you steer by head/phone | Native WebXR VR, else stereo | Stereo + device-orientation | Stereo, drag to look |
+| `vr.html` | Stereo scene: Cardboard VR + no-gear free-view (parallel / cross-eye) | Native WebXR VR, else stereo | Stereo + device-orientation | Stereo, drag to look |
 | `stereo.html` | Shoot a left/right pair → 3D photo | ✅ | ✅ | ✅ (webcam) |
 
 ## Notes & limits

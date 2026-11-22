@@ -17,6 +17,11 @@
 <style>
   /* thin divider down the middle in stereo mode, as a lens guide */
   .divider { position: fixed; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(255,255,255,.12); z-index: 20; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .seg button { background: var(--panel-2); border: none; padding: 9px 12px; cursor: pointer; font-size: 13px; color: var(--fg); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #042019; }
+  #sepWrap { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  #sep { accent-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -35,13 +40,21 @@
     <p style="font-size:13px">Native VR: <span class="badge" id="bvr">—</span> &nbsp; Stereo + head-tracking: <span class="badge" id="bstereo">—</span></p>
     <div class="row">
       <button class="btn primary" id="startBtn" disabled>Checking…</button>
+      <button class="btn" id="freeBtn" disabled>Free-view (no gear)</button>
       <a class="btn ghost" href="index.html">Back</a>
     </div>
-    <p style="font-size:12px;margin-top:12px">Tip: turn your phone <b>landscape</b> and slot it into a Cardboard viewer. Tap the screen (or the viewer's button) to recenter.</p>
+    <p style="font-size:12px;margin-top:12px">Tip: for <b>Cardboard</b>, turn the phone landscape and slot it in. <b>Free-view</b> needs no gear — pick Parallel or Cross-eye and let the two halves fuse into one 3D image. Tap the screen to recenter.</p>
   </div>
 </div>
 
 <div class="controls" id="controls" hidden>
+  <div class="seg" id="fuseToggle" hidden>
+    <button data-cross="0" aria-pressed="true">Parallel</button>
+    <button data-cross="1" aria-pressed="false">Cross-eye</button>
+  </div>
+  <label id="sepWrap" hidden>Depth
+    <input id="sep" type="range" min="0" max="0.12" step="0.004" value="0.064">
+  </label>
   <button class="btn" id="recenter">⟳ Recenter</button>
   <button class="btn ghost" id="exit">Exit</button>
 </div>
@@ -53,6 +66,7 @@ const canvas = document.getElementById('canvas');
 let renderer, scene, camera, stereo, mode = null;
 let yawOffset = 0; // recenter offset for device-orientation
 let deviceQ = new THREE.Quaternion(), haveDevice = false;
+let crossEye = false, eyeSep = 0.064; // free-view options
 
 // ---------- scene ----------
 function buildScene() {
@@ -152,23 +166,38 @@ async function detect() {
     btn.textContent = 'Enter VR';
   } else {
     mode = 'stereo';
-    txt.innerHTML = 'Using the built-in <b>stereo renderer</b>: the scene is drawn twice side-by-side and follows your phone as you turn. Perfect for a Cardboard viewer; on a laptop, drag to look.';
+    txt.innerHTML = 'Using the built-in <b>stereo renderer</b>: the scene is drawn twice side-by-side and follows your phone as you turn. Slot it into a Cardboard viewer, or free-view it with no gear.';
     btn.textContent = 'Enter stereo VR';
   }
   btn.disabled = false;
+  document.getElementById('freeBtn').disabled = false;
 }
 
 // ---------- start ----------
-document.getElementById('startBtn').addEventListener('click', async () => {
-  if (mode === 'stereo' && typeof DeviceOrientationEvent !== 'undefined'
+async function enterStereo(freeview) {
+  if (typeof DeviceOrientationEvent !== 'undefined'
       && typeof DeviceOrientationEvent.requestPermission === 'function') {
     try { await DeviceOrientationEvent.requestPermission(); } catch {}
   }
   buildScene();
   document.getElementById('intro').hidden = true;
   document.getElementById('controls').hidden = false;
-  if (mode === 'xr') startXR(); else startStereo();
+  startStereo(freeview);
+}
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (mode === 'xr') {
+    buildScene();
+    document.getElementById('intro').hidden = true;
+    document.getElementById('controls').hidden = false;
+    startXR();
+  } else {
+    enterStereo(false);
+  }
 });
+
+// Free-view is the on-screen, no-headset stereo view — offered on every device.
+document.getElementById('freeBtn').addEventListener('click', () => enterStereo(true));
 
 async function startXR() {
   renderer.xr.enabled = true;
@@ -180,12 +209,18 @@ async function startXR() {
   renderer.setAnimationLoop(() => { spin(); renderer.render(scene, camera); });
 }
 
-function startStereo() {
+function startStereo(freeview) {
   document.getElementById('divider').hidden = false;
   window.addEventListener('deviceorientation', onOrient, true);
   initDrag();
-  try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch {}
-  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{}); } catch {}
+  if (freeview) {
+    // no headset: expose Parallel/Cross-eye + depth, and don't force fullscreen/landscape
+    document.getElementById('fuseToggle').hidden = false;
+    document.getElementById('sepWrap').hidden = false;
+  } else {
+    try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch {}
+    try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{}); } catch {}
+  }
   document.getElementById('exit').onclick = () => location.reload();
   document.getElementById('recenter').onclick = recenter;
   canvas.addEventListener('click', recenter);
@@ -201,14 +236,18 @@ function startStereo() {
       camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
     }
     camera.updateMatrixWorld();
+    stereo.eyeSep = eyeSep;
     stereo.update(camera);
     renderer.getSize(size);
     const w = size.x, h = size.y;
+    // Parallel: left eye on the left. Cross-eye: swap halves so crossing the eyes fuses them.
+    const leftCam = crossEye ? stereo.cameraR : stereo.cameraL;
+    const rightCam = crossEye ? stereo.cameraL : stereo.cameraR;
     renderer.setScissorTest(true);
     renderer.setScissor(0, 0, w / 2, h); renderer.setViewport(0, 0, w / 2, h);
-    renderer.render(scene, stereo.cameraL);
+    renderer.render(scene, leftCam);
     renderer.setScissor(w / 2, 0, w / 2, h); renderer.setViewport(w / 2, 0, w / 2, h);
-    renderer.render(scene, stereo.cameraR);
+    renderer.render(scene, rightCam);
     renderer.setScissorTest(false);
   });
 }
@@ -225,6 +264,14 @@ function spin() {
   const t = performance.now() * 0.001;
   (window.__spin || []).forEach((m, i) => { m.rotation.x = t * (0.3 + i * 0.05); m.rotation.y = t * (0.4 + i * 0.03); });
 }
+
+// free-view controls
+document.getElementById('fuseToggle').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#fuseToggle button').forEach(x => x.setAttribute('aria-pressed', 'false'));
+  b.setAttribute('aria-pressed', 'true'); crossEye = b.dataset.cross === '1';
+});
+document.getElementById('sep').addEventListener('input', e => { eyeSep = parseFloat(e.target.value); });
 
 addEventListener('resize', () => {
   if (!renderer || mode === 'xr') return;
